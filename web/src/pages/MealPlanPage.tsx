@@ -1,26 +1,37 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addDays, api, formatMacros, toMonday } from '../api'
 import type { MealPlan, MealPlanEntry, MealType, Recipe } from '../types'
 import { MEAL_LABELS, MEAL_TYPES } from '../types'
 
 const DAY_NAMES = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
+const INITIAL_WEEKS_BACK = 1
+const INITIAL_WEEKS_AHEAD = 3
+const LOAD_WEEKS = 2
 
-/** Madpakke kun man–tor (index 0–3). */
-function allowsMadpakke(dayIndex: number): boolean {
-  return dayIndex >= 0 && dayIndex <= 3
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
 }
 
-function dayIndexInWeek(weekStart: string, date: string): number {
-  return Math.round(
-    (new Date(date + 'T12:00:00').getTime() - new Date(weekStart + 'T12:00:00').getTime()) / 86400000,
-  )
+/** Man=0 … Søn=6 */
+function weekdayIndex(date: string): number {
+  return (new Date(date + 'T12:00:00').getDay() + 6) % 7
 }
 
-function maxMadpakkeDaysFrom(weekStart: string, date: string): number {
-  const idx = dayIndexInWeek(weekStart, date)
-  if (!allowsMadpakke(idx)) return 0
+function allowsMadpakkeDate(date: string): boolean {
+  return weekdayIndex(date) <= 3
+}
+
+function maxMadpakkeDaysFromDate(date: string): number {
+  const idx = weekdayIndex(date)
+  if (idx > 3) return 0
   return 4 - idx
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.round(
+    (new Date(to + 'T12:00:00').getTime() - new Date(from + 'T12:00:00').getTime()) / 86400000,
+  )
 }
 
 function entryEnd(entry: MealPlanEntry): string {
@@ -31,30 +42,38 @@ function overlapsRange(entry: MealPlanEntry, from: string, to: string): boolean 
   return entry.date <= to && entryEnd(entry) >= from
 }
 
-function clampSpanInWeek(
+function clampSpanInRange(
   entry: MealPlanEntry,
-  weekStart: string,
+  rangeStart: string,
+  rangeEnd: string,
 ): { row: number; span: number } | null {
-  const weekEnd = addDays(weekStart, 6)
-  // Madpakke klippes til man–tor i den viste uge
-  const rangeEnd = entry.mealType === 1 ? addDays(weekStart, 3) : weekEnd
-  if (!overlapsRange(entry, weekStart, rangeEnd)) return null
+  if (!overlapsRange(entry, rangeStart, rangeEnd)) return null
 
-  const start = entry.date < weekStart ? weekStart : entry.date
+  const start = entry.date < rangeStart ? rangeStart : entry.date
   const end = entryEnd(entry) > rangeEnd ? rangeEnd : entryEnd(entry)
   if (start > end) return null
 
-  const row = dayIndexInWeek(weekStart, start)
-  const span = dayIndexInWeek(weekStart, end) - row + 1
+  const row = daysBetween(rangeStart, start)
+  const span = daysBetween(start, end) + 1
   return { row: Math.max(0, row), span: Math.max(1, span) }
 }
 
-function formatDayLabel(iso: string, index: number) {
+function mondaysInRange(rangeStart: string, rangeEnd: string): string[] {
+  const first = toMonday(new Date(rangeStart + 'T12:00:00'))
+  const mondays: string[] = []
+  for (let d = first; d <= rangeEnd; d = addDays(d, 7)) mondays.push(d)
+  return mondays
+}
+
+function formatDayLabel(iso: string) {
   const d = new Date(iso + 'T12:00:00')
+  const idx = weekdayIndex(iso)
   return {
-    weekday: DAY_NAMES[index],
+    weekday: DAY_NAMES[idx],
     date: d.toLocaleDateString('da-DK', { day: 'numeric', month: 'short' }),
-    isToday: iso === new Date().toISOString().slice(0, 10),
+    isToday: iso === todayIso(),
+    isMonday: idx === 0,
+    monthLabel: d.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' }),
   }
 }
 
@@ -72,59 +91,190 @@ function formatShort(iso: string) {
   })
 }
 
+function mergePlans(existing: MealPlan[], incoming: MealPlan[]): MealPlan[] {
+  const byId = new Map(existing.map((p) => [p.id, p]))
+  for (const p of incoming) byId.set(p.id, p)
+  return [...byId.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+}
+
 export function MealPlanPage() {
-  const [weekStart, setWeekStart] = useState(() => toMonday(new Date()))
-  const [plan, setPlan] = useState<MealPlan | null>(null)
-  const [prevEntries, setPrevEntries] = useState<MealPlanEntry[]>([])
+  const todayMonday = toMonday(new Date())
+  const [rangeStart, setRangeStart] = useState(() => addDays(todayMonday, -7 * INITIAL_WEEKS_BACK))
+  const [rangeEnd, setRangeEnd] = useState(() =>
+    addDays(todayMonday, 7 * INITIAL_WEEKS_AHEAD - 1),
+  )
+  const [plans, setPlans] = useState<MealPlan[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState<'past' | 'future' | null>(null)
   const [adding, setAdding] = useState<{ date: string; mealType: MealType } | null>(null)
   const [recipeId, setRecipeId] = useState('')
   const [servings, setServings] = useState(2)
   const [days, setDays] = useState(1)
 
-  const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart],
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const topSentinelRef = useRef<HTMLDivElement>(null)
+  const bottomSentinelRef = useRef<HTMLDivElement>(null)
+  const todayRowRef = useRef<HTMLDivElement>(null)
+  const prependAdjustRef = useRef<number | null>(null)
+  const loadingMoreRef = useRef<'past' | 'future' | null>(null)
+  const rangeStartRef = useRef(rangeStart)
+  const rangeEndRef = useRef(rangeEnd)
+  rangeStartRef.current = rangeStart
+  rangeEndRef.current = rangeEnd
+
+  const dayCount = daysBetween(rangeStart, rangeEnd) + 1
+  const visibleDays = useMemo(
+    () => Array.from({ length: dayCount }, (_, i) => addDays(rangeStart, i)),
+    [rangeStart, dayCount],
   )
 
   const allEntries = useMemo(() => {
     const byId = new Map<string, MealPlanEntry>()
-    for (const e of [...prevEntries, ...(plan?.entries ?? [])]) byId.set(e.id, e)
+    for (const plan of plans) for (const e of plan.entries) byId.set(e.id, e)
     return [...byId.values()]
-  }, [plan, prevEntries])
+  }, [plans])
 
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const prevWeek = addDays(weekStart, -7)
-      const [ensured, prevPlans, recipeList] = await Promise.all([
-        api.ensureMealPlan(weekStart),
-        api.getMealPlans(prevWeek),
-        api.listRecipes(),
-      ])
-      setPlan(ensured)
-      setPrevEntries(prevPlans[0]?.entries ?? [])
+  const entryOwner = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const plan of plans) for (const e of plan.entries) map.set(e.id, plan.id)
+    return map
+  }, [plans])
+
+  async function loadRange(from: string, to: string, mode: 'replace' | 'merge' = 'replace') {
+    // Hent én uge før for retter der spænder ind i intervallet
+    const fetchFrom = addDays(from, -7)
+    const mondays = mondaysInRange(fetchFrom, to)
+    const [fetched, recipeList] = await Promise.all([
+      Promise.all(mondays.map((m) => api.getMealPlans(m))),
+      mode === 'replace' ? api.listRecipes() : Promise.resolve(null),
+    ])
+    const loaded = fetched.flat()
+    setPlans((prev) => (mode === 'replace' ? mergePlans([], loaded) : mergePlans(prev, loaded)))
+    if (recipeList) {
       setRecipes(recipeList)
-      if (recipeList[0]) setRecipeId(recipeList[0].id)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Kunne ikke hente ugeplan')
-    } finally {
-      setLoading(false)
+      if (recipeList[0]) setRecipeId((id) => id || recipeList[0].id)
     }
   }
 
+  const didScrollToToday = useRef(false)
+
   useEffect(() => {
-    void load()
-  }, [weekStart])
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        await loadRange(rangeStart, rangeEnd, 'replace')
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Kunne ikke hente tidslinje')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (loading || didScrollToToday.current) return
+    didScrollToToday.current = true
+    requestAnimationFrame(() => {
+      todayRowRef.current?.scrollIntoView({ block: 'center' })
+    })
+  }, [loading])
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    const adjust = prependAdjustRef.current
+    if (!el || adjust == null) return
+    el.scrollTop += el.scrollHeight - adjust
+    prependAdjustRef.current = null
+  }, [rangeStart])
+
+  useEffect(() => {
+    if (loading) return
+    const root = scrollRef.current
+    if (!root) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || loadingMoreRef.current) continue
+          if (entry.target === topSentinelRef.current) void expandPast()
+          if (entry.target === bottomSentinelRef.current) void expandFuture()
+        }
+      },
+      { root, rootMargin: '320px 0px', threshold: 0 },
+    )
+
+    const top = topSentinelRef.current
+    const bottom = bottomSentinelRef.current
+    if (top) observer.observe(top)
+    if (bottom) observer.observe(bottom)
+    return () => observer.disconnect()
+  }, [loading])
+
+  async function expandPast() {
+    if (loadingMoreRef.current) return
+    loadingMoreRef.current = 'past'
+    setLoadingMore('past')
+    const el = scrollRef.current
+    if (el) prependAdjustRef.current = el.scrollHeight
+
+    const currentStart = rangeStartRef.current
+    const nextStart = addDays(currentStart, -7 * LOAD_WEEKS)
+    const nextEnd = addDays(currentStart, -1)
+    try {
+      await loadRange(nextStart, nextEnd, 'merge')
+      setRangeStart(nextStart)
+    } catch (e) {
+      prependAdjustRef.current = null
+      setError(e instanceof Error ? e.message : 'Kunne ikke hente tidligere uger')
+    } finally {
+      loadingMoreRef.current = null
+      setLoadingMore(null)
+    }
+  }
+
+  async function expandFuture() {
+    if (loadingMoreRef.current) return
+    loadingMoreRef.current = 'future'
+    setLoadingMore('future')
+    const currentEnd = rangeEndRef.current
+    const nextStart = addDays(currentEnd, 1)
+    const nextEnd = addDays(currentEnd, 7 * LOAD_WEEKS)
+    try {
+      await loadRange(nextStart, nextEnd, 'merge')
+      setRangeEnd(nextEnd)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kunne ikke hente flere uger')
+    } finally {
+      loadingMoreRef.current = null
+      setLoadingMore(null)
+    }
+  }
+
+  function scrollToToday() {
+    todayRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  async function refreshVisible() {
+    try {
+      await loadRange(rangeStart, rangeEnd, 'merge')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kunne ikke opdatere')
+    }
+  }
 
   async function addEntry() {
-    if (!plan || !recipeId || !adding) return
+    if (!recipeId || !adding) return
     let daysToSave = days
     if (adding.mealType === 1) {
-      const max = maxMadpakkeDaysFrom(weekStart, adding.date)
+      const max = maxMadpakkeDaysFromDate(adding.date)
       if (max < 1) {
         setError('Madpakke er kun man–tor.')
         return
@@ -132,6 +282,7 @@ export function MealPlanPage() {
       daysToSave = Math.min(daysToSave, max)
     }
     try {
+      const plan = await api.ensureMealPlan(toMonday(new Date(adding.date + 'T12:00:00')))
       await api.addMealEntry(plan.id, {
         date: adding.date,
         mealType: adding.mealType,
@@ -141,47 +292,43 @@ export function MealPlanPage() {
       })
       setAdding(null)
       setDays(1)
-      await load()
+      await refreshVisible()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kunne ikke tilføje måltid')
     }
   }
 
   async function removeEntry(entryId: string) {
-    if (!plan) return
-    if (!plan.entries.some((e) => e.id === entryId)) {
-      setError('Retten er sat i forrige uge — skift uge for at fjerne den.')
+    const planId = entryOwner.get(entryId)
+    if (!planId) {
+      setError('Kunne ikke finde måltidet.')
       return
     }
-    await api.removeMealEntry(plan.id, entryId)
-    await load()
+    await api.removeMealEntry(planId, entryId)
+    await refreshVisible()
   }
 
   function openAdd(date: string, mealType: MealType) {
-    const idx = dayIndexInWeek(weekStart, date)
-    if (mealType === 1 && !allowsMadpakke(idx)) return
+    if (mealType === 1 && !allowsMadpakkeDate(date)) return
     setAdding({ date, mealType })
     setDays(1)
     const recipe = recipes.find((r) => r.id === recipeId)
     if (recipe) setServings(recipe.servings)
   }
 
-  const madpakkeDayMax = adding?.mealType === 1 ? maxMadpakkeDaysFrom(weekStart, adding.date) : 14
+  const madpakkeDayMax = adding?.mealType === 1 ? maxMadpakkeDaysFromDate(adding.date) : 14
 
   return (
     <section className="stack">
-      <div className="panel row" style={{ justifyContent: 'space-between' }}>
-        <button className="btn secondary" type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>
-          ← Forrige
-        </button>
-        <div style={{ textAlign: 'center' }}>
-          <h2>Tidslinje</h2>
+      <div className="panel row timeline-toolbar">
+        <div>
+          <h2 style={{ margin: 0 }}>Tidslinje</h2>
           <p className="muted" style={{ margin: 0 }}>
-            {loading ? 'Henter…' : `${weekDays[0]} → ${weekDays[6]}`}
+            {loading ? 'Henter…' : 'Scroll for at se flere dage'}
           </p>
         </div>
-        <button className="btn secondary" type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>
-          Næste →
+        <button className="btn secondary" type="button" onClick={scrollToToday}>
+          I dag
         </button>
       </div>
 
@@ -237,12 +384,7 @@ export function MealPlanPage() {
               Madpakke kun man–tor (max {madpakkeDayMax} dage herfra).
             </p>
           )}
-          {days > 1 && adding.mealType === 2 && (
-            <p className="muted" style={{ margin: 0 }}>
-              Dækker {formatShort(adding.date)} → {formatShort(addDays(adding.date, days - 1))}
-            </p>
-          )}
-          {days > 1 && adding.mealType === 1 && (
+          {days > 1 && (
             <p className="muted" style={{ margin: 0 }}>
               Dækker {formatShort(adding.date)} →{' '}
               {formatShort(addDays(adding.date, Math.min(days, madpakkeDayMax) - 1))}
@@ -269,83 +411,98 @@ export function MealPlanPage() {
           ))}
         </div>
 
-        <div className="timeline-grid">
-          <div className="timeline-days">
-            {weekDays.map((date, index) => {
-              const label = formatDayLabel(date, index)
+        <div className="timeline-scroll" ref={scrollRef}>
+          <div ref={topSentinelRef} className="timeline-sentinel">
+            {loadingMore === 'past' ? 'Henter…' : ''}
+          </div>
+
+          <div className="timeline-grid" style={{ ['--day-count' as string]: dayCount }}>
+            <div className="timeline-days">
+              {visibleDays.map((date) => {
+                const label = formatDayLabel(date)
+                return (
+                  <div
+                    key={date}
+                    ref={label.isToday ? todayRowRef : undefined}
+                    className={`timeline-day ${label.isToday ? 'is-today' : ''} ${label.isMonday ? 'is-week-start' : ''}`}
+                  >
+                    {label.isMonday && <em className="timeline-week-label">{label.monthLabel}</em>}
+                    <strong>{label.weekday}</strong>
+                    <span>{label.date}</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {MEAL_TYPES.map((mealType) => {
+              const trackEntries = allEntries
+                .map((entry) => {
+                  if (entry.mealType !== mealType) return null
+                  const pos = clampSpanInRange(entry, rangeStart, rangeEnd)
+                  if (!pos) return null
+                  return { entry, ...pos }
+                })
+                .filter(Boolean) as { entry: MealPlanEntry; row: number; span: number }[]
+
               return (
-                <div key={date} className={`timeline-day ${label.isToday ? 'is-today' : ''}`}>
-                  <strong>{label.weekday}</strong>
-                  <span>{label.date}</span>
+                <div key={mealType} className="timeline-track">
+                  {visibleDays.map((date) => {
+                    const blocked = mealType === 1 && !allowsMadpakkeDate(date)
+                    return blocked ? (
+                      <div key={date} className="timeline-slot is-blocked" aria-hidden="true">
+                        <span>Ingen</span>
+                      </div>
+                    ) : (
+                      <button
+                        key={date}
+                        type="button"
+                        className="timeline-slot"
+                        aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${date}`}
+                        onClick={() => openAdd(date, mealType)}
+                      />
+                    )
+                  })}
+                  {trackEntries.map(({ entry, row, span }) => {
+                    const owned = entryOwner.has(entry.id)
+                    const totalDays = Math.max(1, entry.days ?? 1)
+                    return (
+                      <article
+                        key={entry.id}
+                        className={`timeline-bar meal-${mealType}`}
+                        style={{ gridRow: `${row + 1} / span ${span}` }}
+                      >
+                        <div className="timeline-bar-body">
+                          <strong>{entry.recipeTitle}</strong>
+                          <span className="muted">{rangeLabel(entry)}</span>
+                          <span className="macros">
+                            {entry.servings} port.
+                            {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
+                            {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                          </span>
+                        </div>
+                        {owned && (
+                          <button
+                            className="btn ghost timeline-bar-remove"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void removeEntry(entry.id)
+                            }}
+                          >
+                            Fjern
+                          </button>
+                        )}
+                      </article>
+                    )
+                  })}
                 </div>
               )
             })}
           </div>
 
-          {MEAL_TYPES.map((mealType) => {
-            const trackEntries = allEntries
-              .map((entry) => {
-                if (entry.mealType !== mealType) return null
-                const pos = clampSpanInWeek(entry, weekStart)
-                if (!pos) return null
-                return { entry, ...pos }
-              })
-              .filter(Boolean) as { entry: MealPlanEntry; row: number; span: number }[]
-
-            return (
-              <div key={mealType} className="timeline-track">
-                {weekDays.map((date, index) => {
-                  const blocked = mealType === 1 && !allowsMadpakke(index)
-                  return blocked ? (
-                    <div key={date} className="timeline-slot is-blocked" aria-hidden="true">
-                      <span>Ingen</span>
-                    </div>
-                  ) : (
-                    <button
-                      key={date}
-                      type="button"
-                      className="timeline-slot"
-                      aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${date}`}
-                      onClick={() => openAdd(date, mealType)}
-                    />
-                  )
-                })}
-                {trackEntries.map(({ entry, row, span }) => {
-                  const owned = plan?.entries.some((e) => e.id === entry.id)
-                  const totalDays = Math.max(1, entry.days ?? 1)
-                  return (
-                    <article
-                      key={entry.id}
-                      className={`timeline-bar meal-${mealType}`}
-                      style={{ gridRow: `${row + 1} / span ${span}` }}
-                    >
-                      <div className="timeline-bar-body">
-                        <strong>{entry.recipeTitle}</strong>
-                        <span className="muted">{rangeLabel(entry)}</span>
-                        <span className="macros">
-                          {entry.servings} port.
-                          {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
-                          {totalDays > 1 ? ` · ${totalDays} dage` : ''}
-                        </span>
-                      </div>
-                      {owned && (
-                        <button
-                          className="btn ghost timeline-bar-remove"
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void removeEntry(entry.id)
-                          }}
-                        >
-                          Fjern
-                        </button>
-                      )}
-                    </article>
-                  )
-                })}
-              </div>
-            )
-          })}
+          <div ref={bottomSentinelRef} className="timeline-sentinel">
+            {loadingMore === 'future' ? 'Henter…' : ''}
+          </div>
         </div>
       </div>
     </section>
