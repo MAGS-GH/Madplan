@@ -59,6 +59,9 @@ public static class MealPlanEndpoints
             if (request.MealType is not (MealType.Madpakke or MealType.Aftensmad))
                 return Results.BadRequest(new { error = "Kun madpakke og aftensmad er tilladt." });
 
+            if (request.MealType == MealType.Madpakke && !AllowsMadpakke(request.Date))
+                return Results.BadRequest(new { error = "Madpakke er kun man–tor." });
+
             var recipe = await db.Recipes.Include(r => r.Ingredients).FirstOrDefaultAsync(r => r.Id == request.RecipeId);
             if (recipe is null) return Results.BadRequest(new { error = "Ret findes ikke." });
 
@@ -70,7 +73,7 @@ public static class MealPlanEndpoints
                 RecipeId = request.RecipeId,
                 Recipe = recipe,
                 Servings = Math.Max(0.5, request.Servings),
-                Days = Math.Clamp(request.Days, 1, 14)
+                Days = ClampDays(request.MealType, request.Date, request.Days)
             };
             db.MealPlanEntries.Add(entry);
             await db.SaveChangesAsync();
@@ -93,6 +96,9 @@ public static class MealPlanEndpoints
             if (request.MealType is not (MealType.Madpakke or MealType.Aftensmad))
                 return Results.BadRequest(new { error = "Kun madpakke og aftensmad er tilladt." });
 
+            if (request.MealType == MealType.Madpakke && !AllowsMadpakke(request.Date))
+                return Results.BadRequest(new { error = "Madpakke er kun man–tor." });
+
             var recipeExists = await db.Recipes.AnyAsync(r => r.Id == request.RecipeId);
             if (!recipeExists) return Results.BadRequest(new { error = "Ret findes ikke." });
 
@@ -100,7 +106,7 @@ public static class MealPlanEndpoints
             entry.MealType = request.MealType;
             entry.RecipeId = request.RecipeId;
             entry.Servings = Math.Max(0.5, request.Servings);
-            entry.Days = Math.Clamp(request.Days, 1, 14);
+            entry.Days = ClampDays(request.MealType, request.Date, request.Days);
             await db.SaveChangesAsync();
 
             await db.Entry(entry).Reference(e => e.Recipe).LoadAsync();
@@ -126,6 +132,21 @@ public static class MealPlanEndpoints
     {
         var diff = ((int)date.DayOfWeek + 6) % 7; // Monday=0
         return date.AddDays(-diff);
+    }
+
+    /** Madpakke kun man–tor. */
+    private static bool AllowsMadpakke(DateOnly date) =>
+        date.DayOfWeek is not (DayOfWeek.Friday or DayOfWeek.Saturday or DayOfWeek.Sunday);
+
+    private static int ClampDays(MealType mealType, DateOnly date, int days)
+    {
+        if (mealType != MealType.Madpakke)
+            return Math.Clamp(days, 1, 14);
+
+        // Max dage til og med torsdag i samme uge
+        var thursday = ToMonday(date).AddDays(3);
+        var max = thursday.DayNumber - date.DayNumber + 1;
+        return Math.Clamp(days, 1, Math.Max(1, max));
     }
 
     private static MealPlanDto MapPlan(MealPlan plan) =>

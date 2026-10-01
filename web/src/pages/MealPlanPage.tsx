@@ -6,6 +6,23 @@ import { MEAL_LABELS, MEAL_TYPES } from '../types'
 
 const DAY_NAMES = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
 
+/** Madpakke kun man–tor (index 0–3). */
+function allowsMadpakke(dayIndex: number): boolean {
+  return dayIndex >= 0 && dayIndex <= 3
+}
+
+function dayIndexInWeek(weekStart: string, date: string): number {
+  return Math.round(
+    (new Date(date + 'T12:00:00').getTime() - new Date(weekStart + 'T12:00:00').getTime()) / 86400000,
+  )
+}
+
+function maxMadpakkeDaysFrom(weekStart: string, date: string): number {
+  const idx = dayIndexInWeek(weekStart, date)
+  if (!allowsMadpakke(idx)) return 0
+  return 4 - idx
+}
+
 function entryEnd(entry: MealPlanEntry): string {
   return addDays(entry.date, Math.max(1, entry.days ?? 1) - 1)
 }
@@ -14,21 +31,21 @@ function overlapsRange(entry: MealPlanEntry, from: string, to: string): boolean 
   return entry.date <= to && entryEnd(entry) >= from
 }
 
-function clampSpanInWeek(entry: MealPlanEntry, weekStart: string): { row: number; span: number } | null {
+function clampSpanInWeek(
+  entry: MealPlanEntry,
+  weekStart: string,
+): { row: number; span: number } | null {
   const weekEnd = addDays(weekStart, 6)
-  if (!overlapsRange(entry, weekStart, weekEnd)) return null
+  // Madpakke klippes til man–tor i den viste uge
+  const rangeEnd = entry.mealType === 1 ? addDays(weekStart, 3) : weekEnd
+  if (!overlapsRange(entry, weekStart, rangeEnd)) return null
 
   const start = entry.date < weekStart ? weekStart : entry.date
-  const end = entryEnd(entry) > weekEnd ? weekEnd : entryEnd(entry)
+  const end = entryEnd(entry) > rangeEnd ? rangeEnd : entryEnd(entry)
+  if (start > end) return null
 
-  const row = Math.round(
-    (new Date(start + 'T12:00:00').getTime() - new Date(weekStart + 'T12:00:00').getTime()) / 86400000,
-  )
-  const span =
-    Math.round(
-      (new Date(end + 'T12:00:00').getTime() - new Date(start + 'T12:00:00').getTime()) / 86400000,
-    ) + 1
-
+  const row = dayIndexInWeek(weekStart, start)
+  const span = dayIndexInWeek(weekStart, end) - row + 1
   return { row: Math.max(0, row), span: Math.max(1, span) }
 }
 
@@ -105,13 +122,22 @@ export function MealPlanPage() {
 
   async function addEntry() {
     if (!plan || !recipeId || !adding) return
+    let daysToSave = days
+    if (adding.mealType === 1) {
+      const max = maxMadpakkeDaysFrom(weekStart, adding.date)
+      if (max < 1) {
+        setError('Madpakke er kun man–tor.')
+        return
+      }
+      daysToSave = Math.min(daysToSave, max)
+    }
     try {
       await api.addMealEntry(plan.id, {
         date: adding.date,
         mealType: adding.mealType,
         recipeId,
         servings,
-        days,
+        days: daysToSave,
       })
       setAdding(null)
       setDays(1)
@@ -132,11 +158,15 @@ export function MealPlanPage() {
   }
 
   function openAdd(date: string, mealType: MealType) {
+    const idx = dayIndexInWeek(weekStart, date)
+    if (mealType === 1 && !allowsMadpakke(idx)) return
     setAdding({ date, mealType })
     setDays(1)
     const recipe = recipes.find((r) => r.id === recipeId)
     if (recipe) setServings(recipe.servings)
   }
+
+  const madpakkeDayMax = adding?.mealType === 1 ? maxMadpakkeDaysFrom(weekStart, adding.date) : 14
 
   return (
     <section className="stack">
@@ -193,16 +223,29 @@ export function MealPlanPage() {
                 <input
                   type="number"
                   min={1}
-                  max={14}
-                  value={days}
-                  onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))}
+                  max={madpakkeDayMax}
+                  value={Math.min(days, madpakkeDayMax)}
+                  onChange={(e) =>
+                    setDays(Math.min(madpakkeDayMax, Math.max(1, Number(e.target.value) || 1)))
+                  }
                 />
               </div>
             </div>
           )}
-          {days > 1 && (
+          {adding.mealType === 1 && (
+            <p className="muted" style={{ margin: 0 }}>
+              Madpakke kun man–tor (max {madpakkeDayMax} dage herfra).
+            </p>
+          )}
+          {days > 1 && adding.mealType === 2 && (
             <p className="muted" style={{ margin: 0 }}>
               Dækker {formatShort(adding.date)} → {formatShort(addDays(adding.date, days - 1))}
+            </p>
+          )}
+          {days > 1 && adding.mealType === 1 && (
+            <p className="muted" style={{ margin: 0 }}>
+              Dækker {formatShort(adding.date)} →{' '}
+              {formatShort(addDays(adding.date, Math.min(days, madpakkeDayMax) - 1))}
             </p>
           )}
           <div className="row">
@@ -251,16 +294,22 @@ export function MealPlanPage() {
 
             return (
               <div key={mealType} className="timeline-track">
-                {weekDays.map((date) => (
-                  <button
-                    key={date}
-                    type="button"
-                    className="timeline-slot"
-                    aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${date}`}
-                    onClick={() => openAdd(date, mealType)}
-                  />
-                ))}
-
+                {weekDays.map((date, index) => {
+                  const blocked = mealType === 1 && !allowsMadpakke(index)
+                  return blocked ? (
+                    <div key={date} className="timeline-slot is-blocked" aria-hidden="true">
+                      <span>Ingen</span>
+                    </div>
+                  ) : (
+                    <button
+                      key={date}
+                      type="button"
+                      className="timeline-slot"
+                      aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${date}`}
+                      onClick={() => openAdd(date, mealType)}
+                    />
+                  )
+                })}
                 {trackEntries.map(({ entry, row, span }) => {
                   const owned = plan?.entries.some((e) => e.id === entry.id)
                   const totalDays = Math.max(1, entry.days ?? 1)
