@@ -6,21 +6,53 @@ import { MEAL_LABELS, MEAL_TYPES } from '../types'
 
 const DAY_NAMES = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
 
-function coversDate(entry: MealPlanEntry, date: string): boolean {
-  const days = Math.max(1, entry.days ?? 1)
-  const end = addDays(entry.date, days - 1)
-  return date >= entry.date && date <= end
+function entryEnd(entry: MealPlanEntry): string {
+  return addDays(entry.date, Math.max(1, entry.days ?? 1) - 1)
 }
 
-function dayOffset(entry: MealPlanEntry, date: string): number {
-  const start = new Date(entry.date + 'T12:00:00')
-  const current = new Date(date + 'T12:00:00')
-  return Math.round((current.getTime() - start.getTime()) / 86400000) + 1
+function overlapsRange(entry: MealPlanEntry, from: string, to: string): boolean {
+  return entry.date <= to && entryEnd(entry) >= from
 }
 
-function formatShortDate(iso: string) {
+function clampSpanInWeek(entry: MealPlanEntry, weekStart: string): { row: number; span: number } | null {
+  const weekEnd = addDays(weekStart, 6)
+  if (!overlapsRange(entry, weekStart, weekEnd)) return null
+
+  const start = entry.date < weekStart ? weekStart : entry.date
+  const end = entryEnd(entry) > weekEnd ? weekEnd : entryEnd(entry)
+
+  const row = Math.round(
+    (new Date(start + 'T12:00:00').getTime() - new Date(weekStart + 'T12:00:00').getTime()) / 86400000,
+  )
+  const span =
+    Math.round(
+      (new Date(end + 'T12:00:00').getTime() - new Date(start + 'T12:00:00').getTime()) / 86400000,
+    ) + 1
+
+  return { row: Math.max(0, row), span: Math.max(1, span) }
+}
+
+function formatDayLabel(iso: string, index: number) {
   const d = new Date(iso + 'T12:00:00')
-  return d.toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'numeric' })
+  return {
+    weekday: DAY_NAMES[index],
+    date: d.toLocaleDateString('da-DK', { day: 'numeric', month: 'short' }),
+    isToday: iso === new Date().toISOString().slice(0, 10),
+  }
+}
+
+function rangeLabel(entry: MealPlanEntry) {
+  const days = Math.max(1, entry.days ?? 1)
+  if (days === 1) return formatShort(entry.date)
+  return `${formatShort(entry.date)} → ${formatShort(entryEnd(entry))}`
+}
+
+function formatShort(iso: string) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('da-DK', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'numeric',
+  })
 }
 
 export function MealPlanPage() {
@@ -41,9 +73,8 @@ export function MealPlanPage() {
   )
 
   const allEntries = useMemo(() => {
-    const current = plan?.entries ?? []
     const byId = new Map<string, MealPlanEntry>()
-    for (const e of [...prevEntries, ...current]) byId.set(e.id, e)
+    for (const e of [...prevEntries, ...(plan?.entries ?? [])]) byId.set(e.id, e)
     return [...byId.values()]
   }, [plan, prevEntries])
 
@@ -92,8 +123,7 @@ export function MealPlanPage() {
 
   async function removeEntry(entryId: string) {
     if (!plan) return
-    const owned = plan.entries.some((e) => e.id === entryId)
-    if (!owned) {
+    if (!plan.entries.some((e) => e.id === entryId)) {
       setError('Retten er sat i forrige uge — skift uge for at fjerne den.')
       return
     }
@@ -101,23 +131,26 @@ export function MealPlanPage() {
     await load()
   }
 
-  function shiftWeek(delta: number) {
-    setWeekStart(addDays(weekStart, delta * 7))
+  function openAdd(date: string, mealType: MealType) {
+    setAdding({ date, mealType })
+    setDays(1)
+    const recipe = recipes.find((r) => r.id === recipeId)
+    if (recipe) setServings(recipe.servings)
   }
 
   return (
-    <section>
+    <section className="stack">
       <div className="panel row" style={{ justifyContent: 'space-between' }}>
-        <button className="btn secondary" type="button" onClick={() => shiftWeek(-1)}>
+        <button className="btn secondary" type="button" onClick={() => setWeekStart(addDays(weekStart, -7))}>
           ← Forrige
         </button>
         <div style={{ textAlign: 'center' }}>
-          <h2>Uge fra {weekStart}</h2>
+          <h2>Tidslinje</h2>
           <p className="muted" style={{ margin: 0 }}>
-            {loading ? 'Henter…' : 'Madpakke & aftensmad'}
+            {loading ? 'Henter…' : `${weekDays[0]} → ${weekDays[6]}`}
           </p>
         </div>
-        <button className="btn secondary" type="button" onClick={() => shiftWeek(1)}>
+        <button className="btn secondary" type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>
           Næste →
         </button>
       </div>
@@ -127,7 +160,7 @@ export function MealPlanPage() {
       {adding && (
         <div className="panel stack">
           <h3>
-            Tilføj til {adding.date} · {MEAL_LABELS[adding.mealType]}
+            Tilføj · {MEAL_LABELS[adding.mealType]} · {formatShort(adding.date)}
           </h3>
           {recipes.length === 0 ? (
             <p>
@@ -145,7 +178,7 @@ export function MealPlanPage() {
                   ))}
                 </select>
               </div>
-              <div className="field" style={{ maxWidth: 120 }}>
+              <div className="field" style={{ maxWidth: 110 }}>
                 <label>Portioner</label>
                 <input
                   type="number"
@@ -155,7 +188,7 @@ export function MealPlanPage() {
                   onChange={(e) => setServings(Number(e.target.value))}
                 />
               </div>
-              <div className="field" style={{ maxWidth: 120 }}>
+              <div className="field" style={{ maxWidth: 110 }}>
                 <label>Dage</label>
                 <input
                   type="number"
@@ -169,12 +202,12 @@ export function MealPlanPage() {
           )}
           {days > 1 && (
             <p className="muted" style={{ margin: 0 }}>
-              Vises også {days === 2 ? addDays(adding.date, 1) : `${addDays(adding.date, 1)} … ${addDays(adding.date, days - 1)}`}
+              Dækker {formatShort(adding.date)} → {formatShort(addDays(adding.date, days - 1))}
             </p>
           )}
           <div className="row">
             <button className="btn" type="button" disabled={!recipeId} onClick={() => void addEntry()}>
-              Gem
+              Gem på tidslinjen
             </button>
             <button className="btn ghost" type="button" onClick={() => setAdding(null)}>
               Annuller
@@ -183,69 +216,88 @@ export function MealPlanPage() {
         </div>
       )}
 
-      <div className="day-grid">
-        {weekDays.map((date, index) => {
-          const dayEntries = allEntries.filter((e) => coversDate(e, date))
-          return (
-            <article key={date} className="panel day-card">
-              <h3>
-                {DAY_NAMES[index]}{' '}
-                <span className="muted" style={{ fontFamily: 'var(--font-body)', fontSize: '0.9rem' }}>
-                  {date.slice(5)}
-                </span>
-              </h3>
-              {MEAL_TYPES.map((mealType) => {
-                const slotEntries = dayEntries.filter((e) => e.mealType === mealType)
-                return (
-                  <div key={mealType} className="meal-slot">
-                    <strong>{MEAL_LABELS[mealType]}</strong>
-                    {slotEntries.map((entry) => {
-                      const offset = dayOffset(entry, date)
-                      const totalDays = Math.max(1, entry.days ?? 1)
-                      const isOrigin = entry.date === date
-                      const owned = plan?.entries.some((e) => e.id === entry.id)
-                      return (
-                        <div key={`${entry.id}-${date}`} className="meal-entry">
-                          <div>
-                            <div>{entry.recipeTitle}</div>
-                            <div className="macros">
-                              {entry.servings} port.
-                              {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
-                            </div>
-                            {totalDays > 1 && (
-                              <div className="muted" style={{ fontSize: '0.82rem' }}>
-                                {isOrigin
-                                  ? `${totalDays} dage`
-                                  : `Fra ${formatShortDate(entry.date)} · dag ${offset}/${totalDays}`}
-                              </div>
-                            )}
-                          </div>
-                          {owned && isOrigin && (
-                            <button className="btn ghost" type="button" onClick={() => void removeEntry(entry.id)}>
-                              Fjern
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })}
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      onClick={() => {
-                        setAdding({ date, mealType })
-                        setDays(1)
-                        const recipe = recipes.find((r) => r.id === recipeId)
-                        if (recipe) setServings(recipe.servings)
-                      }}
+      <div className="timeline panel">
+        <div className="timeline-head">
+          <div className="timeline-corner" />
+          {MEAL_TYPES.map((type) => (
+            <div key={type} className="timeline-track-title">
+              {MEAL_LABELS[type]}
+            </div>
+          ))}
+        </div>
+
+        <div className="timeline-grid">
+          <div className="timeline-days">
+            {weekDays.map((date, index) => {
+              const label = formatDayLabel(date, index)
+              return (
+                <div key={date} className={`timeline-day ${label.isToday ? 'is-today' : ''}`}>
+                  <strong>{label.weekday}</strong>
+                  <span>{label.date}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          {MEAL_TYPES.map((mealType) => {
+            const trackEntries = allEntries
+              .map((entry) => {
+                if (entry.mealType !== mealType) return null
+                const pos = clampSpanInWeek(entry, weekStart)
+                if (!pos) return null
+                return { entry, ...pos }
+              })
+              .filter(Boolean) as { entry: MealPlanEntry; row: number; span: number }[]
+
+            return (
+              <div key={mealType} className="timeline-track">
+                {weekDays.map((date) => (
+                  <button
+                    key={date}
+                    type="button"
+                    className="timeline-slot"
+                    aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${date}`}
+                    onClick={() => openAdd(date, mealType)}
+                  />
+                ))}
+
+                {trackEntries.map(({ entry, row, span }) => {
+                  const owned = plan?.entries.some((e) => e.id === entry.id)
+                  const totalDays = Math.max(1, entry.days ?? 1)
+                  return (
+                    <article
+                      key={entry.id}
+                      className={`timeline-bar meal-${mealType}`}
+                      style={{ gridRow: `${row + 1} / span ${span}` }}
                     >
-                      + Tilføj
-                    </button>
-                  </div>
-                )
-              })}
-            </article>
-          )
-        })}
+                      <div className="timeline-bar-body">
+                        <strong>{entry.recipeTitle}</strong>
+                        <span className="muted">{rangeLabel(entry)}</span>
+                        <span className="macros">
+                          {entry.servings} port.
+                          {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
+                          {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                        </span>
+                      </div>
+                      {owned && (
+                        <button
+                          className="btn ghost timeline-bar-remove"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void removeEntry(entry.id)
+                          }}
+                        >
+                          Fjern
+                        </button>
+                      )}
+                    </article>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

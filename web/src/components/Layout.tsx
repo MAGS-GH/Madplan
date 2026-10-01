@@ -8,7 +8,7 @@ export function Layout() {
           <div className="brand">
             Mad<span>plan</span>
           </div>
-          <p>Planlæg ugen, scan varer og hold styr på makroerne — for sjov.</p>
+          <p>Tidslinje for madpakke og aftensmad — planlæg hvad I laver, og hvor mange dage det rækker.</p>
         </div>
       </header>
 
