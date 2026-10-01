@@ -348,21 +348,23 @@ p {
 .timeline-grid {
   display: grid;
   grid-template-columns: 4.5rem 1fr 1fr;
-  gap: 0.5rem;
+  column-gap: 0.5rem;
+  row-gap: 0.35rem;
   position: relative;
+  align-items: stretch;
 }
 
 .timeline-days,
 .timeline-track {
   display: grid;
-  grid-template-rows: var(--row-template, repeat(var(--day-count, 7), minmax(4.6rem, auto)));
-  gap: 0.35rem;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  min-height: 0;
 }
 
 .timeline-week-divider {
   display: flex;
   align-items: center;
-  min-height: 1.75rem;
   padding: 0.15rem 0.2rem;
   border-right: 2px solid transparent;
 }
@@ -390,7 +392,6 @@ p {
 
 .timeline-week-divider-gap {
   position: relative;
-  min-height: 1.75rem;
   pointer-events: none;
 }
 
@@ -417,6 +418,8 @@ p {
   padding: 0.35rem 0.2rem;
   border-right: 2px solid var(--line);
   position: relative;
+  align-self: stretch;
+  min-height: 0;
 }
 
 .timeline-day::after {
@@ -462,6 +465,9 @@ p {
   background: rgba(26, 60, 52, 0.03);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
 }
 
 .timeline-slot:hover {
@@ -504,16 +510,19 @@ p {
 .timeline-bar {
   position: relative;
   z-index: 2;
-  margin: 0.15rem 0.1rem;
+  margin: 0;
   border-radius: 12px;
-  padding: 0.55rem 0.65rem;
+  padding: 0.4rem 0.55rem;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 0.35rem;
+  justify-content: flex-start;
+  gap: 0.2rem;
   animation: fade-up 0.35s ease both;
   border: 1px solid transparent;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .timeline-bar.meal-1 {
@@ -535,13 +544,15 @@ p {
 
 .timeline-bar-body strong {
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1.15;
 }
 
-.timeline-bar-body .muted {
+.timeline-bar-body .muted,
+.timeline-bar-body .macros {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 .timeline-bar-remove {
@@ -663,10 +674,5 @@ p {
 
   .timeline {
     max-height: calc(100dvh - 9rem);
-  }
-
-  .timeline-days,
-  .timeline-track {
-    grid-template-rows: var(--row-template, repeat(var(--day-count, 7), minmax(5.2rem, auto)));
   }
 }

@@ -464,7 +464,10 @@ export function MealPlanPage() {
 
           <div
             className="timeline-grid"
-            style={{ ['--day-count' as string]: rowCount, ['--row-template' as string]: rowTemplate }}
+            style={{
+              gridTemplateRows: rowTemplate,
+              ['--day-count' as string]: rowCount,
+            }}
           >
             <div className="timeline-days">
               {timelineRows.map((row) => {
