@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addDays, api, formatMacros, toMonday } from '../api'
 import type { MealPlan, MealPlanEntry, MealType, Recipe } from '../types'
@@ -96,22 +96,44 @@ function dayRowIndex(rows: TimelineRow[], date: string): number {
   return rows.findIndex((r) => r.kind === 'day' && r.date === date)
 }
 
-function clampSpanInRows(
+/** Klipp bars ved ugeskift, så de aldrig spænder over divider-rækker. */
+function entrySegments(
   entry: MealPlanEntry,
   rangeStart: string,
   rangeEnd: string,
   rows: TimelineRow[],
-): { row: number; span: number } | null {
-  if (!overlapsRange(entry, rangeStart, rangeEnd)) return null
+): { row: number; span: number; primary: boolean }[] {
+  if (!overlapsRange(entry, rangeStart, rangeEnd)) return []
 
   const start = entry.date < rangeStart ? rangeStart : entry.date
   const end = entryEnd(entry) > rangeEnd ? rangeEnd : entryEnd(entry)
-  if (start > end) return null
+  if (start > end) return []
 
-  const row = dayRowIndex(rows, start)
-  const endRow = dayRowIndex(rows, end)
-  if (row < 0 || endRow < 0) return null
-  return { row, span: endRow - row + 1 }
+  const dates: string[] = []
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    if (dayRowIndex(rows, d) >= 0) dates.push(d)
+  }
+  if (dates.length === 0) return []
+
+  const groups: string[][] = [[dates[0]]]
+  for (let i = 1; i < dates.length; i++) {
+    const prev = dates[i - 1]
+    const curr = dates[i]
+    const prevRow = dayRowIndex(rows, prev)
+    const currRow = dayRowIndex(rows, curr)
+    if (currRow > prevRow + 1) groups.push([curr])
+    else groups[groups.length - 1].push(curr)
+  }
+
+  return groups.map((group, index) => {
+    const row = dayRowIndex(rows, group[0])
+    const endRow = dayRowIndex(rows, group[group.length - 1])
+    return { row, span: endRow - row + 1, primary: index === 0 }
+  })
+}
+
+function mealColumn(mealType: MealType): number {
+  return mealType === 1 ? 2 : 3
 }
 
 function rangeLabel(entry: MealPlanEntry) {
@@ -167,7 +189,6 @@ export function MealPlanPage() {
     [rangeStart, dayCount],
   )
   const timelineRows = useMemo(() => buildTimelineRows(visibleDays), [visibleDays])
-  const rowCount = timelineRows.length
   const rowTemplate = useMemo(
     () =>
       timelineRows
@@ -466,98 +487,104 @@ export function MealPlanPage() {
             className="timeline-grid"
             style={{
               gridTemplateRows: rowTemplate,
-              ['--day-count' as string]: rowCount,
             }}
           >
-            <div className="timeline-days">
-              {timelineRows.map((row) => {
-                if (row.kind === 'divider') {
-                  return (
-                    <div key={row.key} className="timeline-week-divider" aria-hidden="true">
-                      <span>{row.label}</span>
-                    </div>
-                  )
-                }
-                const label = formatDayLabel(row.date)
+            {timelineRows.map((row, rowIndex) => {
+              if (row.kind === 'divider') {
                 return (
                   <div
-                    key={row.date}
+                    key={row.key}
+                    className="timeline-week-divider"
+                    style={{ gridColumn: '1 / -1', gridRow: rowIndex + 1 }}
+                  >
+                    <span>{row.label}</span>
+                  </div>
+                )
+              }
+
+              const label = formatDayLabel(row.date)
+              return (
+                <Fragment key={row.date}>
+                  <div
                     ref={label.isToday ? todayRowRef : undefined}
                     className={`timeline-day ${label.isToday ? 'is-today' : ''}`}
+                    style={{ gridColumn: 1, gridRow: rowIndex + 1 }}
                   >
                     <strong>{label.weekday}</strong>
                     <span>{label.date}</span>
                   </div>
-                )
-              })}
-            </div>
-
-            {MEAL_TYPES.map((mealType) => {
-              const trackEntries = allEntries
-                .map((entry) => {
-                  if (entry.mealType !== mealType) return null
-                  const pos = clampSpanInRows(entry, rangeStart, rangeEnd, timelineRows)
-                  if (!pos) return null
-                  return { entry, ...pos }
-                })
-                .filter(Boolean) as { entry: MealPlanEntry; row: number; span: number }[]
-
-              return (
-                <div key={mealType} className="timeline-track">
-                  {timelineRows.map((row) => {
-                    if (row.kind === 'divider') {
-                      return <div key={row.key} className="timeline-week-divider-gap" aria-hidden="true" />
-                    }
+                  {MEAL_TYPES.map((mealType) => {
                     const blocked = mealType === 1 && !allowsMadpakkeDate(row.date)
+                    const col = mealColumn(mealType)
                     return blocked ? (
-                      <div key={row.date} className="timeline-slot is-blocked" aria-hidden="true">
+                      <div
+                        key={`${row.date}-${mealType}`}
+                        className="timeline-slot is-blocked"
+                        style={{ gridColumn: col, gridRow: rowIndex + 1 }}
+                        aria-hidden="true"
+                      >
                         <span>Ingen</span>
                       </div>
                     ) : (
                       <button
-                        key={row.date}
+                        key={`${row.date}-${mealType}`}
                         type="button"
                         className="timeline-slot"
+                        style={{ gridColumn: col, gridRow: rowIndex + 1 }}
                         aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${row.date}`}
                         onClick={() => openAdd(row.date, mealType)}
                       />
                     )
                   })}
-                  {trackEntries.map(({ entry, row, span }) => {
-                    const owned = entryOwner.has(entry.id)
-                    const totalDays = Math.max(1, entry.days ?? 1)
-                    return (
-                      <article
-                        key={entry.id}
-                        className={`timeline-bar meal-${mealType}`}
-                        style={{ gridRow: `${row + 1} / span ${span}` }}
-                      >
-                        <div className="timeline-bar-body">
-                          <strong>{entry.recipeTitle}</strong>
-                          <span className="muted">{rangeLabel(entry)}</span>
-                          <span className="macros">
-                            {entry.servings} port.
-                            {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
-                            {totalDays > 1 ? ` · ${totalDays} dage` : ''}
-                          </span>
-                        </div>
-                        {owned && (
-                          <button
-                            className="btn ghost timeline-bar-remove"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void removeEntry(entry.id)
-                            }}
-                          >
-                            Fjern
-                          </button>
-                        )}
-                      </article>
-                    )
-                  })}
-                </div>
+                </Fragment>
               )
+            })}
+
+            {allEntries.flatMap((entry) => {
+              const segments = entrySegments(entry, rangeStart, rangeEnd, timelineRows)
+              const owned = entryOwner.has(entry.id)
+              const totalDays = Math.max(1, entry.days ?? 1)
+              return segments.map((seg) => (
+                <article
+                  key={`${entry.id}-${seg.row}`}
+                  className={`timeline-bar meal-${entry.mealType}${seg.primary ? '' : ' is-continuation'}`}
+                  style={{
+                    gridColumn: mealColumn(entry.mealType),
+                    gridRow: `${seg.row + 1} / span ${seg.span}`,
+                  }}
+                >
+                  {seg.primary ? (
+                    <>
+                      <div className="timeline-bar-body">
+                        <strong>{entry.recipeTitle}</strong>
+                        <span className="muted">{rangeLabel(entry)}</span>
+                        <span className="macros">
+                          {entry.servings} port.
+                          {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
+                          {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                        </span>
+                      </div>
+                      {owned && (
+                        <button
+                          className="btn ghost timeline-bar-remove"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void removeEntry(entry.id)
+                          }}
+                        >
+                          Fjern
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="timeline-bar-body">
+                      <strong>{entry.recipeTitle}</strong>
+                      <span className="muted">fortsætter</span>
+                    </div>
+                  )}
+                </article>
+              ))
             })}
           </div>
 

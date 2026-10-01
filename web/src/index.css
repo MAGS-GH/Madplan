@@ -354,25 +354,19 @@ p {
   align-items: stretch;
 }
 
-.timeline-days,
-.timeline-track {
-  display: grid;
-  grid-template-rows: subgrid;
-  grid-row: 1 / -1;
-  min-height: 0;
-}
-
 .timeline-week-divider {
   display: flex;
   align-items: center;
-  padding: 0.15rem 0.2rem;
-  border-right: 2px solid transparent;
+  gap: 0.75rem;
+  padding: 0 0.15rem;
+  z-index: 1;
 }
 
 .timeline-week-divider span {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -390,17 +384,9 @@ p {
   flex-shrink: 0;
 }
 
-.timeline-week-divider-gap {
-  position: relative;
-  pointer-events: none;
-}
-
-.timeline-week-divider-gap::before {
+.timeline-week-divider::after {
   content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
+  flex: 1;
   height: 2px;
   background: linear-gradient(
     90deg,
@@ -408,7 +394,6 @@ p {
     rgba(26, 60, 52, 0.12) 55%,
     transparent
   );
-  transform: translateY(-50%);
 }
 
 .timeline-day {
@@ -420,6 +405,7 @@ p {
   position: relative;
   align-self: stretch;
   min-height: 0;
+  z-index: 1;
 }
 
 .timeline-day::after {
@@ -454,10 +440,6 @@ p {
   box-shadow: 0 0 0 4px rgba(196, 92, 38, 0.2);
 }
 
-.timeline-track {
-  position: relative;
-}
-
 .timeline-slot {
   appearance: none;
   border: 1px dashed transparent;
@@ -467,7 +449,9 @@ p {
   transition: background 0.15s ease, border-color 0.15s ease;
   min-height: 0;
   height: 100%;
+  width: 100%;
   align-self: stretch;
+  z-index: 0;
 }
 
 .timeline-slot:hover {
@@ -521,8 +505,15 @@ p {
   border: 1px solid transparent;
   min-height: 0;
   height: 100%;
+  width: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  align-self: stretch;
+}
+
+.timeline-bar.is-continuation {
+  opacity: 0.92;
+  justify-content: center;
 }
 
 .timeline-bar.meal-1 {
