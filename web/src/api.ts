@@ -52,7 +52,7 @@ export const api = {
     }),
   addMealEntry: (
     planId: string,
-    body: { date: string; mealType: number; recipeId: string; servings: number },
+    body: { date: string; mealType: number; recipeId: string; servings: number; days: number },
   ) =>
     request(`/meal-plans/${planId}/entries`, {
       method: 'POST',

@@ -60,6 +60,7 @@ public record MealPlanEntryDto(
     Guid RecipeId,
     string RecipeTitle,
     double Servings,
+    int Days,
     MacrosDto? Macros);
 
 public record MealPlanDto(
@@ -74,7 +75,8 @@ public record UpsertMealPlanEntryRequest(
     DateOnly Date,
     MealType MealType,
     Guid RecipeId,
-    double Servings);
+    double Servings,
+    int Days = 1);
 
 public record ShoppingItemDto(
     Guid Id,

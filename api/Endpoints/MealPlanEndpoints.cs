@@ -56,6 +56,9 @@ public static class MealPlanEndpoints
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (plan is null) return Results.NotFound();
 
+            if (request.MealType is not (MealType.Madpakke or MealType.Aftensmad))
+                return Results.BadRequest(new { error = "Kun madpakke og aftensmad er tilladt." });
+
             var recipe = await db.Recipes.Include(r => r.Ingredients).FirstOrDefaultAsync(r => r.Id == request.RecipeId);
             if (recipe is null) return Results.BadRequest(new { error = "Ret findes ikke." });
 
@@ -66,7 +69,8 @@ public static class MealPlanEndpoints
                 MealType = request.MealType,
                 RecipeId = request.RecipeId,
                 Recipe = recipe,
-                Servings = Math.Max(0.5, request.Servings)
+                Servings = Math.Max(0.5, request.Servings),
+                Days = Math.Clamp(request.Days, 1, 14)
             };
             db.MealPlanEntries.Add(entry);
             await db.SaveChangesAsync();
@@ -86,6 +90,9 @@ public static class MealPlanEndpoints
                 .FirstOrDefaultAsync(e => e.Id == entryId && e.MealPlanId == planId);
             if (entry is null) return Results.NotFound();
 
+            if (request.MealType is not (MealType.Madpakke or MealType.Aftensmad))
+                return Results.BadRequest(new { error = "Kun madpakke og aftensmad er tilladt." });
+
             var recipeExists = await db.Recipes.AnyAsync(r => r.Id == request.RecipeId);
             if (!recipeExists) return Results.BadRequest(new { error = "Ret findes ikke." });
 
@@ -93,6 +100,7 @@ public static class MealPlanEndpoints
             entry.MealType = request.MealType;
             entry.RecipeId = request.RecipeId;
             entry.Servings = Math.Max(0.5, request.Servings);
+            entry.Days = Math.Clamp(request.Days, 1, 14);
             await db.SaveChangesAsync();
 
             await db.Entry(entry).Reference(e => e.Recipe).LoadAsync();
@@ -141,6 +149,7 @@ public static class MealPlanEndpoints
             entry.RecipeId,
             entry.Recipe?.Title ?? "",
             entry.Servings,
+            Math.Max(1, entry.Days),
             macros);
     }
 }

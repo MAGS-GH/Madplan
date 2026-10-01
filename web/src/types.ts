@@ -61,7 +61,8 @@ export type Product = {
   source: string
 }
 
-export type MealType = 0 | 1 | 2 | 3
+/** 1 = Madpakke, 2 = Aftensmad */
+export type MealType = 1 | 2
 
 export type MealPlanEntry = {
   id: string
@@ -70,6 +71,7 @@ export type MealPlanEntry = {
   recipeId: string
   recipeTitle: string
   servings: number
+  days: number
   macros?: Macros | null
 }
 
@@ -96,9 +98,9 @@ export type ShoppingList = {
   items: ShoppingItem[]
 }
 
+export const MEAL_TYPES: MealType[] = [1, 2]
+
 export const MEAL_LABELS: Record<MealType, string> = {
-  0: 'Morgen',
-  1: 'Frokost',
-  2: 'Aften',
-  3: 'Snack',
+  1: 'Madpakke',
+  2: 'Aftensmad',
 }

@@ -59,6 +59,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<MealPlanEntry>(e =>
         {
             e.HasKey(x => x.Id);
+            e.Property(x => x.Days).HasDefaultValue(1);
             e.HasOne(x => x.Recipe)
                 .WithMany()
                 .HasForeignKey(x => x.RecipeId)

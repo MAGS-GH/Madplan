@@ -70,10 +70,8 @@ public class Product
 
 public enum MealType
 {
-    Breakfast = 0,
-    Lunch = 1,
-    Dinner = 2,
-    Snack = 3
+    Madpakke = 1,
+    Aftensmad = 2
 }
 
 public class MealPlan
@@ -94,6 +92,8 @@ public class MealPlanEntry
     public Guid RecipeId { get; set; }
     public Recipe? Recipe { get; set; }
     public double Servings { get; set; } = 2;
+    /// <summary>Antal dage retten dækker fra Date (fx 2 = i dag + i morgen).</summary>
+    public int Days { get; set; } = 1;
 }
 
 public class ShoppingList
