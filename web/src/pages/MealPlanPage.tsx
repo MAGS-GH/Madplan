@@ -42,22 +42,6 @@ function overlapsRange(entry: MealPlanEntry, from: string, to: string): boolean 
   return entry.date <= to && entryEnd(entry) >= from
 }
 
-function clampSpanInRange(
-  entry: MealPlanEntry,
-  rangeStart: string,
-  rangeEnd: string,
-): { row: number; span: number } | null {
-  if (!overlapsRange(entry, rangeStart, rangeEnd)) return null
-
-  const start = entry.date < rangeStart ? rangeStart : entry.date
-  const end = entryEnd(entry) > rangeEnd ? rangeEnd : entryEnd(entry)
-  if (start > end) return null
-
-  const row = daysBetween(rangeStart, start)
-  const span = daysBetween(start, end) + 1
-  return { row: Math.max(0, row), span: Math.max(1, span) }
-}
-
 function mondaysInRange(rangeStart: string, rangeEnd: string): string[] {
   const first = toMonday(new Date(rangeStart + 'T12:00:00'))
   const mondays: string[] = []
@@ -73,8 +57,61 @@ function formatDayLabel(iso: string) {
     date: d.toLocaleDateString('da-DK', { day: 'numeric', month: 'short' }),
     isToday: iso === todayIso(),
     isMonday: idx === 0,
-    monthLabel: d.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' }),
   }
+}
+
+function isoWeekNumber(iso: string): number {
+  const d = new Date(iso + 'T12:00:00')
+  const dayNum = (d.getDay() + 6) % 7
+  d.setDate(d.getDate() - dayNum + 3)
+  const firstThursday = new Date(d.getFullYear(), 0, 4)
+  const weekOneDay = (firstThursday.getDay() + 6) % 7
+  firstThursday.setDate(firstThursday.getDate() - weekOneDay + 3)
+  return 1 + Math.round((d.getTime() - firstThursday.getTime()) / 604800000)
+}
+
+function weekDividerLabel(mondayIso: string) {
+  const d = new Date(mondayIso + 'T12:00:00')
+  const week = isoWeekNumber(mondayIso)
+  const month = d.toLocaleDateString('da-DK', { month: 'long' })
+  return `Uge ${week} · ${month}`
+}
+
+type TimelineRow =
+  | { kind: 'day'; date: string }
+  | { kind: 'divider'; key: string; label: string }
+
+function buildTimelineRows(days: string[]): TimelineRow[] {
+  const rows: TimelineRow[] = []
+  for (const date of days) {
+    if (weekdayIndex(date) === 0) {
+      rows.push({ kind: 'divider', key: `w-${date}`, label: weekDividerLabel(date) })
+    }
+    rows.push({ kind: 'day', date })
+  }
+  return rows
+}
+
+function dayRowIndex(rows: TimelineRow[], date: string): number {
+  return rows.findIndex((r) => r.kind === 'day' && r.date === date)
+}
+
+function clampSpanInRows(
+  entry: MealPlanEntry,
+  rangeStart: string,
+  rangeEnd: string,
+  rows: TimelineRow[],
+): { row: number; span: number } | null {
+  if (!overlapsRange(entry, rangeStart, rangeEnd)) return null
+
+  const start = entry.date < rangeStart ? rangeStart : entry.date
+  const end = entryEnd(entry) > rangeEnd ? rangeEnd : entryEnd(entry)
+  if (start > end) return null
+
+  const row = dayRowIndex(rows, start)
+  const endRow = dayRowIndex(rows, end)
+  if (row < 0 || endRow < 0) return null
+  return { row, span: endRow - row + 1 }
 }
 
 function rangeLabel(entry: MealPlanEntry) {
@@ -128,6 +165,15 @@ export function MealPlanPage() {
   const visibleDays = useMemo(
     () => Array.from({ length: dayCount }, (_, i) => addDays(rangeStart, i)),
     [rangeStart, dayCount],
+  )
+  const timelineRows = useMemo(() => buildTimelineRows(visibleDays), [visibleDays])
+  const rowCount = timelineRows.length
+  const rowTemplate = useMemo(
+    () =>
+      timelineRows
+        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(4.6rem, auto)'))
+        .join(' '),
+    [timelineRows],
   )
 
   const allEntries = useMemo(() => {
@@ -416,17 +462,26 @@ export function MealPlanPage() {
             {loadingMore === 'past' ? 'Henter…' : ''}
           </div>
 
-          <div className="timeline-grid" style={{ ['--day-count' as string]: dayCount }}>
+          <div
+            className="timeline-grid"
+            style={{ ['--day-count' as string]: rowCount, ['--row-template' as string]: rowTemplate }}
+          >
             <div className="timeline-days">
-              {visibleDays.map((date) => {
-                const label = formatDayLabel(date)
+              {timelineRows.map((row) => {
+                if (row.kind === 'divider') {
+                  return (
+                    <div key={row.key} className="timeline-week-divider" aria-hidden="true">
+                      <span>{row.label}</span>
+                    </div>
+                  )
+                }
+                const label = formatDayLabel(row.date)
                 return (
                   <div
-                    key={date}
+                    key={row.date}
                     ref={label.isToday ? todayRowRef : undefined}
-                    className={`timeline-day ${label.isToday ? 'is-today' : ''} ${label.isMonday ? 'is-week-start' : ''}`}
+                    className={`timeline-day ${label.isToday ? 'is-today' : ''}`}
                   >
-                    {label.isMonday && <em className="timeline-week-label">{label.monthLabel}</em>}
                     <strong>{label.weekday}</strong>
                     <span>{label.date}</span>
                   </div>
@@ -438,7 +493,7 @@ export function MealPlanPage() {
               const trackEntries = allEntries
                 .map((entry) => {
                   if (entry.mealType !== mealType) return null
-                  const pos = clampSpanInRange(entry, rangeStart, rangeEnd)
+                  const pos = clampSpanInRows(entry, rangeStart, rangeEnd, timelineRows)
                   if (!pos) return null
                   return { entry, ...pos }
                 })
@@ -446,19 +501,22 @@ export function MealPlanPage() {
 
               return (
                 <div key={mealType} className="timeline-track">
-                  {visibleDays.map((date) => {
-                    const blocked = mealType === 1 && !allowsMadpakkeDate(date)
+                  {timelineRows.map((row) => {
+                    if (row.kind === 'divider') {
+                      return <div key={row.key} className="timeline-week-divider-gap" aria-hidden="true" />
+                    }
+                    const blocked = mealType === 1 && !allowsMadpakkeDate(row.date)
                     return blocked ? (
-                      <div key={date} className="timeline-slot is-blocked" aria-hidden="true">
+                      <div key={row.date} className="timeline-slot is-blocked" aria-hidden="true">
                         <span>Ingen</span>
                       </div>
                     ) : (
                       <button
-                        key={date}
+                        key={row.date}
                         type="button"
                         className="timeline-slot"
-                        aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${date}`}
-                        onClick={() => openAdd(date, mealType)}
+                        aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${row.date}`}
+                        onClick={() => openAdd(row.date, mealType)}
                       />
                     )
                   })}
