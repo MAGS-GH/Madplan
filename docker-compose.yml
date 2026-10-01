@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-madplan}
+      POSTGRES_USER: ${POSTGRES_USER:-madplan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-madplan}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-madplan} -d ${POSTGRES_DB:-madplan}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-madplan};Username=${POSTGRES_USER:-madplan};Password=${POSTGRES_PASSWORD:-madplan}
+      OpenAI__ApiKey: ${OpenAI__ApiKey:-}
+      OpenAI__Model: ${OpenAI__Model:-gpt-4o-mini}
+      Cors__Origins: ${Cors__Origins:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - internal
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.${TRAEFIK_ROUTER:-madplan}.rule=Host(`${TRAFFIK_HOST:-madplan.localhost}`)
+      - traefik.http.routers.${TRAEFIK_ROUTER:-madplan}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.${TRAEFIK_ROUTER:-madplan}.tls.certresolver=letsencrypt
+      - traefik.http.services.${TRAEFIK_ROUTER:-madplan}.loadbalancer.server.port=3000
+
+volumes:
+  db_data:
+
+networks:
+  internal:
+  dokploy-network:
+    external: true

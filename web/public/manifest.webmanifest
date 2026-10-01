@@ -1,0 +1,22 @@
+{
+  "name": "Madplan",
+  "short_name": "Madplan",
+  "description": "Ugeplan, retter, indkøb og stregkodescan",
+  "theme_color": "#1a3c34",
+  "background_color": "#f3efe6",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

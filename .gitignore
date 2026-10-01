@@ -1,0 +1,21 @@
+# Env
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vs/
+.idea/
+*.user
+.DS_Store
+Thumbs.db
+
+# Build
+**/bin/
+**/obj/
+web/node_modules/
+web/dist/
+web/dev-dist/
+
+# Logs
+*.log
