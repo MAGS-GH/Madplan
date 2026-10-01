@@ -8,6 +8,11 @@ Mobil-først madplans-PWA til ugeplan, retter med makroer, indkøb, stregkodesca
 - `web` — Vite + React + PWA (nginx proxy `/api` → api)
 - Docker Compose (Dokploy-klar)
 
+## Hosting
+
+- **Prod/Dev URL:** https://mad.mags.dk  
+- Traefik-labels på `web` i [`docker-compose.yml`](docker-compose.yml) (`Host(\`mad.mags.dk\`)`, `entrypoints=web`)
+
 ## Lokal udvikling
 
 ```bash
