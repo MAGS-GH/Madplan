@@ -42,13 +42,6 @@ services:
     networks:
       - internal
       - dokploy-network
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=dokploy-network
-      - traefik.http.routers.${TRAEFIK_ROUTER:-madplan}.rule=Host(`${TRAFFIK_HOST:-madplan.localhost}`)
-      - traefik.http.routers.${TRAEFIK_ROUTER:-madplan}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
-      - traefik.http.routers.${TRAEFIK_ROUTER:-madplan}.tls.certresolver=letsencrypt
-      - traefik.http.services.${TRAEFIK_ROUTER:-madplan}.loadbalancer.server.port=3000
 
 volumes:
   db_data:
