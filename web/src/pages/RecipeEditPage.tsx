@@ -27,10 +27,14 @@ export function RecipeEditPage() {
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [servings, setServings] = useState(2)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [ingredients, setIngredients] = useState<DraftIngredient[]>([emptyIngredient()])
   const [products, setProducts] = useState<Product[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [importUrl, setImportUrl] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importInfo, setImportInfo] = useState<string | null>(null)
 
   useEffect(() => {
     void api.listProducts().then(setProducts).catch(() => undefined)
@@ -41,6 +45,7 @@ export function RecipeEditPage() {
           setTitle(recipe.title)
           setNotes(recipe.notes ?? '')
           setServings(recipe.servings)
+          setImageUrl(recipe.imageUrl ?? null)
           setIngredients(
             recipe.ingredients.map((i) => ({
               key: i.id,
@@ -113,6 +118,41 @@ export function RecipeEditPage() {
     updateIngredient(key, { amount, ...macrosFromPer100g(amount, product) })
   }
 
+  async function importFromUrl() {
+    const url = importUrl.trim()
+    if (!url) return
+    setImporting(true)
+    setError(null)
+    setImportInfo(null)
+    try {
+      const imported = await api.importRecipeFromUrl(url)
+      setTitle(imported.title)
+      setNotes(imported.notes ?? '')
+      setServings(Math.max(1, imported.servings || 2))
+      setImageUrl(imported.imageUrl ?? null)
+      setIngredients(
+        imported.ingredients.length > 0
+          ? imported.ingredients.map((i) => ({
+              key: crypto.randomUUID(),
+              productId: i.productId ?? null,
+              name: i.name,
+              amount: i.amount,
+              unit: i.unit,
+              kcal: i.kcal,
+              protein: i.protein,
+              carbs: i.carbs,
+              fat: i.fat,
+            }))
+          : [emptyIngredient()],
+      )
+      setImportInfo(`Hentet ${imported.ingredients.length} ingredienser — tjek og gem.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kunne ikke importere opskrift')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   async function save() {
     setSaving(true)
     setError(null)
@@ -121,7 +161,7 @@ export function RecipeEditPage() {
         title: title.trim(),
         notes: notes.trim() || null,
         servings,
-        imageUrl: null,
+        imageUrl: imageUrl?.trim() || null,
         ingredients: ingredients
           .filter((i) => i.name.trim())
           .map(({ productId, name, amount, unit, kcal, protein, carbs, fat }) => ({
@@ -164,6 +204,41 @@ export function RecipeEditPage() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {importInfo && <div className="success">{importInfo}</div>}
+
+      {isNew && (
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Import fra URL</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Indsæt et link til en opskrift — AI henter titel, ingredienser, makroer og fremgangsmåde.
+          </p>
+          <div className="row" style={{ alignItems: 'flex-end' }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Opskrifts-URL</label>
+              <input
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                placeholder="https://…"
+                inputMode="url"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void importFromUrl()
+                  }
+                }}
+              />
+            </div>
+            <button
+              className="btn accent"
+              type="button"
+              disabled={importing || !importUrl.trim()}
+              onClick={() => void importFromUrl()}
+            >
+              {importing ? 'Henter…' : 'Hent med AI'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="panel stack">
         <div className="row">
@@ -181,6 +256,13 @@ export function RecipeEditPage() {
             />
           </div>
         </div>
+        {imageUrl && (
+          <div className="field">
+            <label>Billede</label>
+            <img className="preview-img" src={imageUrl} alt="" />
+            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value || null)} />
+          </div>
+        )}
         <div className="field">
           <label>Noter</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Fremgangsmåde, tips…" />

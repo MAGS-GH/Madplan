@@ -42,6 +42,11 @@ export const api = {
   updateRecipe: (id: string, body: UpsertRecipeRequest) =>
     request<Recipe>(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteRecipe: (id: string) => request<void>(`/recipes/${id}`, { method: 'DELETE' }),
+  importRecipeFromUrl: (url: string) =>
+    request<UpsertRecipeRequest>('/recipes/import-url', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    }),
 
   getMealPlans: (weekStart?: string) =>
     request<MealPlan[]>(`/meal-plans${weekStart ? `?weekStart=${weekStart}` : ''}`),

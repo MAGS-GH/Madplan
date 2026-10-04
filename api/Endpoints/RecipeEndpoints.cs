@@ -26,6 +26,23 @@ public static class RecipeEndpoints
             return recipe is null ? Results.NotFound() : Results.Ok(MapRecipe(recipe));
         });
 
+        group.MapPost("/import-url", async (ImportRecipeUrlRequest request, RecipeImportService importer) =>
+        {
+            try
+            {
+                var imported = await importer.ImportFromUrlAsync(request.Url);
+                return Results.Ok(imported);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         group.MapPost("/", async (UpsertRecipeRequest request, AppDbContext db) =>
         {
             if (string.IsNullOrWhiteSpace(request.Title))

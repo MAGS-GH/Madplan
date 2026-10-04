@@ -42,6 +42,8 @@ public record UpsertRecipeRequest(
     string? ImageUrl,
     IReadOnlyList<RecipeIngredientInput> Ingredients);
 
+public record ImportRecipeUrlRequest(string Url);
+
 public record ProductDto(
     Guid Id,
     string Name,
