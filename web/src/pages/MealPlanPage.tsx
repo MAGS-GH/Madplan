@@ -165,21 +165,33 @@ function MacroDetails({
   servings: number
   days: number
 }) {
+  const [perPersonDaily, setPerPersonDaily] = useState(days >= 3)
   const safeDays = Math.max(1, days)
   const safeServings = Math.max(0.5, servings)
-  const perPersonDaily = safeDays >= 3
   const persons = safeServings / safeDays
   const display = perPersonDaily ? scaleMacros(macros, 1 / safeServings) : macros
 
   return (
     <div className="timeline-macro-panel">
-      {perPersonDaily ? (
+      <div className="timeline-macro-toolbar">
         <p className="timeline-macro-caption">
-          {formatMacroValue(persons)} {persons === 1 ? 'person' : 'personer'} · pr. person / dag
+          {perPersonDaily
+            ? `${formatMacroValue(persons)} ${persons === 1 ? 'person' : 'personer'} · pr. person / dag`
+            : `I alt for ${formatMacroValue(safeServings)} port.`}
         </p>
-      ) : (
-        <p className="timeline-macro-caption">I alt for {formatMacroValue(safeServings)} port.</p>
-      )}
+        <button
+          className="timeline-macro-toggle"
+          type="button"
+          title={perPersonDaily ? 'Vis i alt' : 'Vis pr. person / dag'}
+          aria-label={perPersonDaily ? 'Vis i alt' : 'Vis pr. person / dag'}
+          onClick={(e) => {
+            e.stopPropagation()
+            setPerPersonDaily((v) => !v)
+          }}
+        >
+          {perPersonDaily ? 'I alt' : 'Pr. pers.'}
+        </button>
+      </div>
       <dl className="timeline-macro-details">
         <div>
           <dt>Kalorier</dt>
