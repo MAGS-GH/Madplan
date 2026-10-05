@@ -476,14 +476,24 @@ export function MealPlanPage() {
                 >
                   {seg.primary ? (
                     <>
-                      <div className="timeline-bar-body">
-                        <strong>{entry.recipeTitle}</strong>
-                        <span className="muted">{rangeLabel(entry)}</span>
-                        <span className="macros">
-                          {entry.servings} port.
-                          {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
-                          {totalDays > 1 ? ` · ${totalDays} dage` : ''}
-                        </span>
+                      <div className="timeline-bar-main">
+                        {entry.recipeImageUrl ? (
+                          <img
+                            className="timeline-bar-thumb"
+                            src={entry.recipeImageUrl}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : null}
+                        <div className="timeline-bar-body">
+                          <strong>{entry.recipeTitle}</strong>
+                          <span className="muted">{rangeLabel(entry)}</span>
+                          <span className="macros">
+                            {entry.servings} port.
+                            {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
+                            {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                          </span>
+                        </div>
                       </div>
                       {owned && (
                         <button
@@ -499,9 +509,19 @@ export function MealPlanPage() {
                       )}
                     </>
                   ) : (
-                    <div className="timeline-bar-body">
-                      <strong>{entry.recipeTitle}</strong>
-                      <span className="muted">fortsætter</span>
+                    <div className="timeline-bar-main">
+                      {entry.recipeImageUrl ? (
+                        <img
+                          className="timeline-bar-thumb"
+                          src={entry.recipeImageUrl}
+                          alt=""
+                          loading="lazy"
+                        />
+                      ) : null}
+                      <div className="timeline-bar-body">
+                        <strong>{entry.recipeTitle}</strong>
+                        <span className="muted">fortsætter</span>
+                      </div>
                     </div>
                   )}
                 </article>

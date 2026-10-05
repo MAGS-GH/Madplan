@@ -65,7 +65,8 @@ public record MealPlanEntryDto(
     string RecipeTitle,
     double Servings,
     int Days,
-    MacrosDto? Macros);
+    MacrosDto? Macros,
+    string? RecipeImageUrl = null);
 
 public record MealPlanDto(
     Guid Id,

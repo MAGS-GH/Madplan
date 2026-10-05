@@ -75,6 +75,7 @@ export type MealPlanEntry = {
   servings: number
   days: number
   macros?: Macros | null
+  recipeImageUrl?: string | null
 }
 
 export type MealPlan = {

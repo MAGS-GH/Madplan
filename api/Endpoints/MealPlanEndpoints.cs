@@ -171,6 +171,7 @@ public static class MealPlanEndpoints
             entry.Recipe?.Title ?? "",
             entry.Servings,
             Math.Max(1, entry.Days),
-            macros);
+            macros,
+            entry.Recipe?.ImageUrl);
     }
 }
