@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, formatMacros } from '../api'
+import { api } from '../api'
 import type { Recipe } from '../types'
 
 export function RecipesPage() {
@@ -52,62 +52,61 @@ export function RecipesPage() {
         </div>
       ) : (
         <div className="recipe-gallery">
-          {recipes.map((recipe) => (
-            <article key={recipe.id} className="recipe-card">
-              <Link className="recipe-card-media" to={`/retter/${recipe.id}`}>
-                {recipe.imageUrl ? (
-                  <img src={recipe.imageUrl} alt="" loading="lazy" />
-                ) : (
-                  <div className="recipe-card-placeholder" aria-hidden="true">
-                    <span>{recipe.title.slice(0, 1).toUpperCase()}</span>
+          {recipes.map((recipe) => {
+            const ingredientThumbs = recipe.ingredients.filter((i) => i.imageUrl).slice(0, 5)
+            return (
+              <article key={recipe.id} className="recipe-card">
+                <Link className="recipe-card-media" to={`/retter/${recipe.id}`}>
+                  {recipe.imageUrl ? (
+                    <img src={recipe.imageUrl} alt="" loading="lazy" />
+                  ) : (
+                    <div className="recipe-card-placeholder" aria-hidden="true">
+                      <span>{recipe.title.slice(0, 1).toUpperCase()}</span>
+                    </div>
+                  )}
+                </Link>
+                <div className="recipe-card-body">
+                  <div className="recipe-card-top">
+                    <Link className="recipe-card-title" to={`/retter/${recipe.id}`}>
+                      {recipe.title}
+                    </Link>
+                    <button
+                      className="recipe-card-remove"
+                      type="button"
+                      title="Slet"
+                      aria-label={`Slet ${recipe.title}`}
+                      onClick={() => void remove(recipe.id, recipe.title)}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                      </svg>
+                    </button>
                   </div>
-                )}
-              </Link>
-              <div className="recipe-card-body">
-                <div className="recipe-card-top">
-                  <Link className="recipe-card-title" to={`/retter/${recipe.id}`}>
-                    {recipe.title}
-                  </Link>
-                  <button
-                    className="recipe-card-remove"
-                    type="button"
-                    title="Slet"
-                    aria-label={`Slet ${recipe.title}`}
-                    onClick={() => void remove(recipe.id, recipe.title)}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 6h18" />
-                      <path d="M8 6V4h8v2" />
-                      <path d="M19 6l-1 14H6L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="recipe-card-meta">
-                  <span>{recipe.servings} portioner</span>
-                  <span>{recipe.ingredients.length} ingredienser</span>
-                </div>
-                <div className="recipe-card-macros">
-                  <span>{Math.round(recipe.perServingMacros.kcal)} kcal</span>
-                  <span>P {Math.round(recipe.perServingMacros.protein)} g</span>
-                  <span>K {Math.round(recipe.perServingMacros.carbs)} g</span>
-                  <span>F {Math.round(recipe.perServingMacros.fat)} g</span>
-                  <span className="muted">/ portion</span>
-                </div>
-                {recipe.ingredients.some((i) => i.imageUrl) && (
-                  <div className="recipe-card-ingredients" aria-hidden="true">
-                    {recipe.ingredients
-                      .filter((i) => i.imageUrl)
-                      .slice(0, 5)
-                      .map((ing) => (
-                        <img key={ing.id} src={ing.imageUrl!} alt="" loading="lazy" />
+                  <div className="recipe-card-meta">
+                    <span>{recipe.servings} portioner</span>
+                    <span>{recipe.ingredients.length} ingredienser</span>
+                  </div>
+                  <div className="recipe-card-macros">
+                    <span>{Math.round(recipe.perServingMacros.kcal)} kcal</span>
+                    <span>Protein {Math.round(recipe.perServingMacros.protein)} g</span>
+                    <span>Kulhydrat {Math.round(recipe.perServingMacros.carbs)} g</span>
+                    <span>Fedt {Math.round(recipe.perServingMacros.fat)} g</span>
+                  </div>
+                  <p className="recipe-card-portion muted">Pr. portion</p>
+                  {ingredientThumbs.length > 0 && (
+                    <div className="recipe-card-ingredients" aria-hidden="true">
+                      {ingredientThumbs.map((ing) => (
+                        <img key={ing.id} src={ing.imageUrl!} alt="" loading="lazy" title={ing.name} />
                       ))}
-                  </div>
-                )}
-                <p className="recipe-card-macros-line muted">{formatMacros(recipe.perServingMacros)} / portion</p>
-              </div>
-            </article>
-          ))}
+                    </div>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
     </section>
