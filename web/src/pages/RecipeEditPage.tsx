@@ -150,7 +150,11 @@ export function RecipeEditPage() {
             }))
           : [emptyIngredient()],
       )
-      setImportInfo(`Hentet ${imported.ingredients.length} ingredienser — tjek og gem.`)
+      setImportInfo(
+        imported.imageUrl
+          ? `Hentet ${imported.ingredients.length} ingredienser + billede — tjek og gem.`
+          : `Hentet ${imported.ingredients.length} ingredienser — tjek og gem.`,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kunne ikke importere opskrift')
     } finally {

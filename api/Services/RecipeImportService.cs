@@ -10,6 +10,7 @@ namespace Madplan.Api.Services;
 
 public class RecipeImportService(
     HttpClient http,
+    ObjectStorageService storage,
     IOptions<OpenAiOptions> options,
     ILogger<RecipeImportService> logger)
 {
@@ -25,6 +26,18 @@ public class RecipeImportService(
 
     private static readonly Regex TagRegex = new(@"<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+
+    private static readonly Regex OgImageRegex = new(
+        @"<meta\b[^>]*(?:property|name)\s*=\s*[""'](?<key>og:image(?:\:secure_url)?|twitter:image)[""'][^>]*content\s*=\s*[""'](?<url>[^""']+)[""']|<meta\b[^>]*content\s*=\s*[""'](?<url>[^""']+)[""'][^>]*(?:property|name)\s*=\s*[""'](?<key>og:image(?:\:secure_url)?|twitter:image)[""']",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex JsonLdRegex = new(
+        @"<script[^>]*type\s*=\s*[""']application/ld\+json[""'][^>]*>(?<json>[\s\S]*?)</script>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex LinkImageRegex = new(
+        @"<link\b[^>]*rel\s*=\s*[""']image_src[""'][^>]*href\s*=\s*[""'](?<url>[^""']+)[""']|<link\b[^>]*href\s*=\s*[""'](?<url>[^""']+)[""'][^>]*rel\s*=\s*[""']image_src[""']",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public async Task<UpsertRecipeRequest> ImportFromUrlAsync(string url, CancellationToken ct = default)
     {
@@ -54,6 +67,8 @@ public class RecipeImportService(
 
         if (string.IsNullOrWhiteSpace(html))
             throw new InvalidOperationException("Siden var tom.");
+
+        var extractedImageUrl = ExtractImageUrl(html, uri);
 
         var pageText = HtmlToText(html);
         if (pageText.Length < 40)
@@ -103,7 +118,7 @@ public class RecipeImportService(
                     - amount skal være tal (brug 0.5 ikke "½"). unit på dansk: g, dl, ml, stk, tsk, spsk, nip, osv.
                     - Makroer er for den angivne mængde af hver ingrediens (ikke pr. 100 g).
                     - Hvis siden mangler makroer, estimér realistisk fra typiske danske værdier. Brug 0 hvis helt ukendt.
-                    - imageUrl: absolut http(s) URL hvis et opskriftsbillede fremgår; ellers null.
+                    - imageUrl: absolut http(s) URL til hovedbilledet hvis det fremgår i teksten; ellers null (appen finder ofte også og:image selv).
                     - Medtag kun rigtige opskriftsingredienser (ikke reklamer/navigation).
                     - Gæt ikke vilde værdier; hold estimater konservative.
                     """
@@ -111,7 +126,9 @@ public class RecipeImportService(
                 new
                 {
                     role = "user",
-                    content = $"Ekstrahér opskriften fra denne side.\nURL: {uri}\n\nTekst:\n{pageText}"
+                    content = string.IsNullOrWhiteSpace(extractedImageUrl)
+                        ? $"Ekstrahér opskriften fra denne side.\nURL: {uri}\n\nTekst:\n{pageText}"
+                        : $"Ekstrahér opskriften fra denne side.\nURL: {uri}\nFundet sidebillede: {extractedImageUrl}\n\nTekst:\n{pageText}"
                 }
             }
         };
@@ -161,13 +178,8 @@ public class RecipeImportService(
                 ? $"Kilde: {uri}"
                 : $"{notes.TrimEnd()}\n\nKilde: {uri}";
 
-        string? imageUrl = null;
-        if (!string.IsNullOrWhiteSpace(parsed.ImageUrl) &&
-            Uri.TryCreate(parsed.ImageUrl, UriKind.Absolute, out var imgUri) &&
-            (imgUri.Scheme == Uri.UriSchemeHttp || imgUri.Scheme == Uri.UriSchemeHttps))
-        {
-            imageUrl = imgUri.ToString();
-        }
+        var candidateImage = FirstPublicImageUrl(extractedImageUrl, parsed.ImageUrl);
+        var imageUrl = await PersistImageAsync(candidateImage, ct);
 
         return new UpsertRecipeRequest(
             parsed.Title.Trim(),
@@ -208,6 +220,236 @@ public class RecipeImportService(
 
         return true;
     }
+
+    private async Task<string?> PersistImageAsync(string? imageUrl, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl)) return null;
+        if (!Uri.TryCreate(imageUrl.Trim(), UriKind.Absolute, out var imgUri) ||
+            (imgUri.Scheme != Uri.UriSchemeHttp && imgUri.Scheme != Uri.UriSchemeHttps))
+            return null;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, imgUri);
+            request.Headers.Accept.ParseAdd("image/*,*/*");
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Image download failed {Status} for {Url}", response.StatusCode, imgUri);
+                return imgUri.ToString();
+            }
+
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? GuessContentType(imgUri);
+            contentType = NormalizeImageContentType(contentType);
+            if (contentType is null)
+            {
+                logger.LogWarning("Unsupported image content-type for {Url}", imgUri);
+                return imgUri.ToString();
+            }
+
+            await using var remote = await response.Content.ReadAsStreamAsync(ct);
+            await using var buffer = new MemoryStream();
+            await remote.CopyToAsync(buffer, ct);
+            if (buffer.Length is 0 or > 12 * 1024 * 1024)
+                return imgUri.ToString();
+
+            buffer.Position = 0;
+            var fileName = Path.GetFileName(imgUri.LocalPath);
+            if (string.IsNullOrWhiteSpace(fileName) || fileName.Length > 80)
+                fileName = "recipe" + ExtensionFor(contentType);
+
+            var (url, _) = await storage.UploadAsync(buffer, contentType, fileName, "recipes", ct);
+            return url;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not persist recipe image {Url}", imgUri);
+            return imgUri.ToString();
+        }
+    }
+
+    private static string? FirstPublicImageUrl(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) continue;
+            if (Uri.TryCreate(candidate.Trim(), UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                return uri.ToString();
+        }
+
+        return null;
+    }
+
+    private static string? ExtractImageUrl(string html, Uri pageUri)
+    {
+        foreach (Match match in OgImageRegex.Matches(html))
+        {
+            var resolved = ResolveUrl(match.Groups["url"].Value, pageUri);
+            if (resolved is not null) return resolved;
+        }
+
+        foreach (Match match in LinkImageRegex.Matches(html))
+        {
+            var resolved = ResolveUrl(match.Groups["url"].Value, pageUri);
+            if (resolved is not null) return resolved;
+        }
+
+        foreach (Match match in JsonLdRegex.Matches(html))
+        {
+            var json = WebUtility.HtmlDecode(match.Groups["json"].Value.Trim());
+            if (string.IsNullOrWhiteSpace(json)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var found = FindRecipeImage(doc.RootElement);
+                var resolved = ResolveUrl(found, pageUri);
+                if (resolved is not null) return resolved;
+            }
+            catch (JsonException)
+            {
+                // ignore malformed ld+json blocks
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindRecipeImage(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var found = FindRecipeImage(item);
+                if (found is not null) return found;
+            }
+
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var isRecipe = false;
+        if (element.TryGetProperty("@type", out var typeEl))
+            isRecipe = IsRecipeType(typeEl);
+
+        if (isRecipe && element.TryGetProperty("image", out var imageEl))
+        {
+            var fromImage = ImageFromJson(imageEl);
+            if (fromImage is not null) return fromImage;
+        }
+
+        if (element.TryGetProperty("@graph", out var graph))
+        {
+            var fromGraph = FindRecipeImage(graph);
+            if (fromGraph is not null) return fromGraph;
+        }
+
+        // Fallback: any image on a Recipe-like object, or top-level image
+        if (element.TryGetProperty("image", out var anyImage))
+        {
+            var fromAny = ImageFromJson(anyImage);
+            if (fromAny is not null && isRecipe) return fromAny;
+        }
+
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+            {
+                var nested = FindRecipeImage(prop.Value);
+                if (nested is not null) return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsRecipeType(JsonElement typeEl) => typeEl.ValueKind switch
+    {
+        JsonValueKind.String => typeEl.GetString()?.Contains("Recipe", StringComparison.OrdinalIgnoreCase) == true,
+        JsonValueKind.Array => typeEl.EnumerateArray().Any(t =>
+            t.ValueKind == JsonValueKind.String &&
+            t.GetString()?.Contains("Recipe", StringComparison.OrdinalIgnoreCase) == true),
+        _ => false
+    };
+
+    private static string? ImageFromJson(JsonElement imageEl)
+    {
+        switch (imageEl.ValueKind)
+        {
+            case JsonValueKind.String:
+                return imageEl.GetString();
+            case JsonValueKind.Array:
+                foreach (var item in imageEl.EnumerateArray())
+                {
+                    var found = ImageFromJson(item);
+                    if (found is not null) return found;
+                }
+
+                return null;
+            case JsonValueKind.Object:
+                if (imageEl.TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String)
+                    return url.GetString();
+                if (imageEl.TryGetProperty("@id", out var id) && id.ValueKind == JsonValueKind.String)
+                    return id.GetString();
+                if (imageEl.TryGetProperty("contentUrl", out var contentUrl) && contentUrl.ValueKind == JsonValueKind.String)
+                    return contentUrl.GetString();
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private static string? ResolveUrl(string? value, Uri pageUri)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = WebUtility.HtmlDecode(value.Trim());
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
+            return absolute.ToString();
+
+        if (Uri.TryCreate(pageUri, trimmed, out var relative) &&
+            (relative.Scheme == Uri.UriSchemeHttp || relative.Scheme == Uri.UriSchemeHttps))
+            return relative.ToString();
+
+        return null;
+    }
+
+    private static string GuessContentType(Uri uri)
+    {
+        var ext = Path.GetExtension(uri.LocalPath).ToLowerInvariant();
+        return ext switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            _ => "image/jpeg",
+        };
+    }
+
+    private static string? NormalizeImageContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType)) return null;
+        contentType = contentType.Split(';')[0].Trim().ToLowerInvariant();
+        return contentType switch
+        {
+            "image/jpeg" or "image/jpg" or "image/png" or "image/webp" or "image/gif" => contentType == "image/jpg" ? "image/jpeg" : contentType,
+            "application/octet-stream" => "image/jpeg",
+            _ => null,
+        };
+    }
+
+    private static string ExtensionFor(string contentType) => contentType.ToLowerInvariant() switch
+    {
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        _ => ".jpg",
+    };
 
     private static string HtmlToText(string html)
     {
