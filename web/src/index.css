@@ -637,11 +637,22 @@ p {
   box-shadow: 0 1px 4px rgba(26, 42, 36, 0.12);
 }
 
+.timeline-macro-panel {
+  margin-top: 0.3rem;
+}
+
+.timeline-macro-caption {
+  margin: 0 0 0.28rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
 .timeline-macro-details {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.28rem 0.55rem;
-  margin: 0.35rem 0 0;
+  margin: 0;
   padding: 0.4rem 0.45rem;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.42);

@@ -147,26 +147,58 @@ function formatMacroValue(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
-function MacroDetails({ macros }: { macros: Macros }) {
+function scaleMacros(macros: Macros, factor: number): Macros {
+  return {
+    kcal: macros.kcal * factor,
+    protein: macros.protein * factor,
+    carbs: macros.carbs * factor,
+    fat: macros.fat * factor,
+  }
+}
+
+function MacroDetails({
+  macros,
+  servings,
+  days,
+}: {
+  macros: Macros
+  servings: number
+  days: number
+}) {
+  const safeDays = Math.max(1, days)
+  const safeServings = Math.max(0.5, servings)
+  const perPersonDaily = safeDays >= 3
+  const persons = safeServings / safeDays
+  const display = perPersonDaily ? scaleMacros(macros, 1 / safeServings) : macros
+
   return (
-    <dl className="timeline-macro-details">
-      <div>
-        <dt>Kalorier</dt>
-        <dd>{Math.round(macros.kcal)} kcal</dd>
-      </div>
-      <div>
-        <dt>Protein</dt>
-        <dd>{formatMacroValue(macros.protein)} g</dd>
-      </div>
-      <div>
-        <dt>Kulhydrat</dt>
-        <dd>{formatMacroValue(macros.carbs)} g</dd>
-      </div>
-      <div>
-        <dt>Fedt</dt>
-        <dd>{formatMacroValue(macros.fat)} g</dd>
-      </div>
-    </dl>
+    <div className="timeline-macro-panel">
+      {perPersonDaily ? (
+        <p className="timeline-macro-caption">
+          {formatMacroValue(persons)} {persons === 1 ? 'person' : 'personer'} · pr. person / dag
+        </p>
+      ) : (
+        <p className="timeline-macro-caption">I alt for {formatMacroValue(safeServings)} port.</p>
+      )}
+      <dl className="timeline-macro-details">
+        <div>
+          <dt>Kalorier</dt>
+          <dd>{Math.round(display.kcal)} kcal</dd>
+        </div>
+        <div>
+          <dt>Protein</dt>
+          <dd>{formatMacroValue(display.protein)} g</dd>
+        </div>
+        <div>
+          <dt>Kulhydrat</dt>
+          <dd>{formatMacroValue(display.carbs)} g</dd>
+        </div>
+        <div>
+          <dt>Fedt</dt>
+          <dd>{formatMacroValue(display.fat)} g</dd>
+        </div>
+      </dl>
+    </div>
   )
 }
 
@@ -546,6 +578,8 @@ export function MealPlanPage() {
                                 carbs: selectedRecipe.perServingMacros.carbs * draftEntry.servings,
                                 fat: selectedRecipe.perServingMacros.fat * draftEntry.servings,
                               }}
+                              servings={draftEntry.servings}
+                              days={draftDays}
                             />
                           ) : null}
                         </>
@@ -614,7 +648,13 @@ export function MealPlanPage() {
                             {totalDays > 1 ? ` · ${totalDays} dage` : ''}
                             {seg.span === 1 && entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
                           </span>
-                          {seg.span > 1 && entry.macros ? <MacroDetails macros={entry.macros} /> : null}
+                          {seg.span > 1 && entry.macros ? (
+                            <MacroDetails
+                              macros={entry.macros}
+                              servings={entry.servings}
+                              days={totalDays}
+                            />
+                          ) : null}
                         </>
                       ) : (
                         <span className="muted">fortsætter</span>
