@@ -717,13 +717,38 @@ export function MealPlanPage() {
               <>
                 <div className="field">
                   <label>Ret</label>
-                  <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
-                    {recipes.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.title}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="recipe-picker" role="listbox" aria-label="Vælg ret">
+                    {recipes.map((r) => {
+                      const selected = r.id === recipeId
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className={`recipe-picker-option${selected ? ' is-selected' : ''}`}
+                          onClick={() => {
+                            setRecipeId(r.id)
+                            setServings(r.servings)
+                          }}
+                        >
+                          {r.imageUrl ? (
+                            <img className="recipe-picker-thumb" src={r.imageUrl} alt="" loading="lazy" />
+                          ) : (
+                            <div className="recipe-picker-thumb is-empty" aria-hidden="true">
+                              {r.title.slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="recipe-picker-copy">
+                            <strong>{r.title}</strong>
+                            <span className="muted">
+                              {Math.round(r.perServingMacros.kcal)} kcal · {r.servings} port.
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
                 <div className="row">
                   <div className="field">
