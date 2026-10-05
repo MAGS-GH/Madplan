@@ -53,25 +53,33 @@ public class ObjectStorageService
                 _logger.LogInformation("Created S3 bucket {Bucket}", _options.Bucket);
             }
 
-            var policy = $$"""
-                {
-                  "Version": "2012-10-17",
-                  "Statement": [
-                    {
-                      "Effect": "Allow",
-                      "Principal": { "AWS": ["*"] },
-                      "Action": ["s3:GetObject"],
-                      "Resource": ["arn:aws:s3:::{{_options.Bucket}}/*"]
-                    }
-                  ]
-                }
-                """;
-
-            await client.PutBucketPolicyAsync(new PutBucketPolicyRequest
+            try
             {
-                BucketName = _options.Bucket,
-                Policy = policy,
-            }, ct);
+                var policy = $$"""
+                    {
+                      "Version": "2012-10-17",
+                      "Statement": [
+                        {
+                          "Effect": "Allow",
+                          "Principal": { "AWS": ["*"] },
+                          "Action": ["s3:GetObject"],
+                          "Resource": ["arn:aws:s3:::{{_options.Bucket}}/*"]
+                        }
+                      ]
+                    }
+                    """;
+
+                await client.PutBucketPolicyAsync(new PutBucketPolicyRequest
+                {
+                    BucketName = _options.Bucket,
+                    Policy = policy,
+                }, ct);
+            }
+            catch (Exception policyEx)
+            {
+                // MinIO kan afvise anonyme policies afhængigt af version — upload skal stadig virke.
+                _logger.LogWarning(policyEx, "Could not set public read policy on bucket {Bucket}", _options.Bucket);
+            }
 
             _bucketReady = true;
         }

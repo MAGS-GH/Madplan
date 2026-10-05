@@ -38,6 +38,10 @@ public static class UploadEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
+            catch (Exception ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: 500, title: "Upload fejlede");
+            }
         });
 
         return group;

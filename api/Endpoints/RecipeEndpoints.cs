@@ -75,8 +75,13 @@ public static class RecipeEndpoints
             recipe.ImageUrl = request.ImageUrl;
             recipe.UpdatedAt = DateTime.UtcNow;
 
+            // Slet og genindsæt i to trin — ellers får EF concurrency-fejl ved ReplaceRange.
             db.RecipeIngredients.RemoveRange(recipe.Ingredients);
-            recipe.Ingredients = request.Ingredients.Select(MapIngredient).ToList();
+            await db.SaveChangesAsync();
+
+            recipe.Ingredients.Clear();
+            foreach (var input in request.Ingredients)
+                recipe.Ingredients.Add(MapIngredient(input));
 
             await db.SaveChangesAsync();
             return Results.Ok(MapRecipe(recipe));
