@@ -381,93 +381,17 @@ export function MealPlanPage() {
     setDays(1)
     const recipe = recipes.find((r) => r.id === recipeId)
     if (recipe) setServings(recipe.servings)
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 959px)').matches) {
+      requestAnimationFrame(() => {
+        document.querySelector('.plan-side')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    }
   }
 
   const madpakkeDayMax = adding?.mealType === 1 ? maxMadpakkeDaysFromDate(adding.date) : 14
 
   return (
-    <section className="stack">
-      <div className="panel row timeline-toolbar">
-        <div>
-          <h2 style={{ margin: 0 }}>Tidslinje</h2>
-          <p className="muted" style={{ margin: 0 }}>
-            {loading ? 'Henter…' : 'Scroll for at se flere dage'}
-          </p>
-        </div>
-        <button className="btn secondary" type="button" onClick={scrollToToday}>
-          I dag
-        </button>
-      </div>
-
-      {error && <div className="error">{error}</div>}
-
-      {adding && (
-        <div className="panel stack">
-          <h3>
-            Tilføj · {MEAL_LABELS[adding.mealType]} · {formatShort(adding.date)}
-          </h3>
-          {recipes.length === 0 ? (
-            <p>
-              Ingen retter endnu. <Link to="/retter/ny">Opret en ret</Link> først.
-            </p>
-          ) : (
-            <div className="row">
-              <div className="field">
-                <label>Ret</label>
-                <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
-                  {recipes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field" style={{ maxWidth: 110 }}>
-                <label>Portioner</label>
-                <input
-                  type="number"
-                  min={0.5}
-                  step={0.5}
-                  value={servings}
-                  onChange={(e) => setServings(Number(e.target.value))}
-                />
-              </div>
-              <div className="field" style={{ maxWidth: 110 }}>
-                <label>Dage</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={madpakkeDayMax}
-                  value={Math.min(days, madpakkeDayMax)}
-                  onChange={(e) =>
-                    setDays(Math.min(madpakkeDayMax, Math.max(1, Number(e.target.value) || 1)))
-                  }
-                />
-              </div>
-            </div>
-          )}
-          {adding.mealType === 1 && (
-            <p className="muted" style={{ margin: 0 }}>
-              Madpakke kun man–tor (max {madpakkeDayMax} dage herfra).
-            </p>
-          )}
-          {days > 1 && (
-            <p className="muted" style={{ margin: 0 }}>
-              Dækker {formatShort(adding.date)} →{' '}
-              {formatShort(addDays(adding.date, Math.min(days, madpakkeDayMax) - 1))}
-            </p>
-          )}
-          <div className="row">
-            <button className="btn" type="button" disabled={!recipeId} onClick={() => void addEntry()}>
-              Gem på tidslinjen
-            </button>
-            <button className="btn ghost" type="button" onClick={() => setAdding(null)}>
-              Annuller
-            </button>
-          </div>
-        </div>
-      )}
-
+    <section className="plan-layout">
       <div className="timeline panel">
         <div className="timeline-head">
           <div className="timeline-corner" />
@@ -483,12 +407,7 @@ export function MealPlanPage() {
             {loadingMore === 'past' ? 'Henter…' : ''}
           </div>
 
-          <div
-            className="timeline-grid"
-            style={{
-              gridTemplateRows: rowTemplate,
-            }}
-          >
+          <div className="timeline-grid" style={{ gridTemplateRows: rowTemplate }}>
             {timelineRows.map((row, rowIndex) => {
               if (row.kind === 'divider') {
                 return (
@@ -516,6 +435,8 @@ export function MealPlanPage() {
                   {MEAL_TYPES.map((mealType) => {
                     const blocked = mealType === 1 && !allowsMadpakkeDate(row.date)
                     const col = mealColumn(mealType)
+                    const isActive =
+                      !!adding && adding.date === row.date && adding.mealType === mealType
                     return blocked ? (
                       <div
                         key={`${row.date}-${mealType}`}
@@ -529,7 +450,7 @@ export function MealPlanPage() {
                       <button
                         key={`${row.date}-${mealType}`}
                         type="button"
-                        className="timeline-slot"
+                        className={`timeline-slot${isActive ? ' is-active' : ''}`}
                         style={{ gridColumn: col, gridRow: rowIndex + 1 }}
                         aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${row.date}`}
                         onClick={() => openAdd(row.date, mealType)}
@@ -593,6 +514,113 @@ export function MealPlanPage() {
           </div>
         </div>
       </div>
+
+      <aside className="plan-side panel stack">
+        <div className="plan-side-head">
+          <div>
+            <h2 style={{ margin: 0 }}>Ugeplan</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              {loading ? 'Henter…' : 'Scroll i kalenderen'}
+            </p>
+          </div>
+          <button className="btn secondary" type="button" onClick={scrollToToday}>
+            I dag
+          </button>
+        </div>
+
+        {error && (
+          <div className="error" style={{ marginBottom: 0 }}>
+            {error}
+          </div>
+        )}
+
+        {adding ? (
+          <div className="plan-side-form stack">
+            <div>
+              <p className="plan-side-kicker">{MEAL_LABELS[adding.mealType]}</p>
+              <h3 style={{ margin: 0 }}>{formatShort(adding.date)}</h3>
+            </div>
+            {recipes.length === 0 ? (
+              <p style={{ margin: 0 }}>
+                Ingen retter endnu. <Link to="/retter/ny">Opret en ret</Link> først.
+              </p>
+            ) : (
+              <>
+                <div className="field">
+                  <label>Ret</label>
+                  <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
+                    {recipes.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="row">
+                  <div className="field">
+                    <label>Portioner</label>
+                    <input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      value={servings}
+                      onChange={(e) => setServings(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Dage</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={madpakkeDayMax}
+                      value={Math.min(days, madpakkeDayMax)}
+                      onChange={(e) =>
+                        setDays(Math.min(madpakkeDayMax, Math.max(1, Number(e.target.value) || 1)))
+                      }
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+            {adding.mealType === 1 && (
+              <p className="muted" style={{ margin: 0 }}>
+                Madpakke kun man–tor (max {madpakkeDayMax} dage herfra).
+              </p>
+            )}
+            {days > 1 && (
+              <p className="muted" style={{ margin: 0 }}>
+                Dækker {formatShort(adding.date)} →{' '}
+                {formatShort(addDays(adding.date, Math.min(days, madpakkeDayMax) - 1))}
+              </p>
+            )}
+            <div className="plan-side-actions">
+              <button
+                className="btn"
+                type="button"
+                disabled={!recipeId || recipes.length === 0}
+                onClick={() => void addEntry()}
+              >
+                Gem
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setAdding(null)}>
+                Annuller
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="plan-side-empty">
+            <p style={{ margin: 0 }}>
+              Tryk på en tom plads i kalenderen for at tilføje madpakke eller aftensmad.
+            </p>
+            <p className="muted" style={{ margin: 0 }}>
+              Retter der spænder flere dage vises som sammenhængende blokke.
+            </p>
+            <Link className="btn secondary" to="/retter/ny">
+              Ny ret
+            </Link>
+          </div>
+        )}
+      </aside>
     </section>
   )
 }

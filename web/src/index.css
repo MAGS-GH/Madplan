@@ -68,7 +68,7 @@ p {
 }
 
 .app-shell {
-  max-width: 960px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 1rem 1rem 5.5rem;
   animation: fade-up 0.45s ease both;
@@ -298,12 +298,54 @@ p {
   align-items: center;
 }
 
+.plan-layout {
+  display: grid;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.plan-side {
+  margin-bottom: 0;
+  gap: 1rem;
+}
+
+.plan-side-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.plan-side-kicker {
+  margin: 0 0 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.plan-side-form,
+.plan-side-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.plan-side-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .timeline {
   padding: 0.85rem;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 11rem);
+  margin-bottom: 0;
+  min-height: 28rem;
 }
 
 .timeline-head {
@@ -457,6 +499,12 @@ p {
 .timeline-slot:hover {
   background: rgba(196, 92, 38, 0.08);
   border-color: rgba(196, 92, 38, 0.35);
+}
+
+.timeline-slot.is-active {
+  background: rgba(196, 92, 38, 0.12);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.25);
 }
 
 .timeline-slot.is-blocked {
@@ -662,8 +710,39 @@ p {
   .timeline-grid {
     grid-template-columns: 5.5rem 1fr 1fr;
   }
+}
+
+@media (min-width: 960px) {
+  .topbar p {
+    max-width: 24rem;
+  }
+
+  .plan-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 1.1rem;
+    min-height: calc(100dvh - 10rem);
+  }
 
   .timeline {
-    max-height: calc(100dvh - 9rem);
+    max-height: calc(100dvh - 9.5rem);
+    min-height: calc(100dvh - 9.5rem);
+  }
+
+  .plan-side {
+    position: sticky;
+    top: 4.5rem;
+    align-self: start;
+    max-height: calc(100dvh - 9.5rem);
+    overflow: auto;
+  }
+}
+
+@media (max-width: 959px) {
+  .plan-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline {
+    max-height: calc(100dvh - 14rem);
   }
 }
