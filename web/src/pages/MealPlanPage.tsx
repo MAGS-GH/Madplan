@@ -209,6 +209,30 @@ export function MealPlanPage() {
     return map
   }, [plans])
 
+  const madpakkeDayMax = adding?.mealType === 1 ? maxMadpakkeDaysFromDate(adding.date) : 14
+  const draftDays = Math.min(Math.max(1, days), madpakkeDayMax || 1)
+  const selectedRecipe = recipes.find((r) => r.id === recipeId)
+
+  const draftEntry = useMemo((): MealPlanEntry | null => {
+    if (!adding) return null
+    return {
+      id: '__draft__',
+      date: adding.date,
+      mealType: adding.mealType,
+      recipeId: recipeId || '__draft__',
+      recipeTitle: selectedRecipe?.title ?? 'Ny ret',
+      servings,
+      days: draftDays,
+      recipeImageUrl: selectedRecipe?.imageUrl ?? null,
+    }
+  }, [adding, recipeId, servings, draftDays, selectedRecipe])
+
+  const draftSegments = useMemo(
+    () =>
+      draftEntry ? entrySegments(draftEntry, rangeStart, rangeEnd, timelineRows) : [],
+    [draftEntry, rangeStart, rangeEnd, timelineRows],
+  )
+
   async function loadRange(from: string, to: string, mode: 'replace' | 'merge' = 'replace') {
     // Hent én uge før for retter der spænder ind i intervallet
     const fetchFrom = addDays(from, -7)
@@ -388,8 +412,6 @@ export function MealPlanPage() {
     }
   }
 
-  const madpakkeDayMax = adding?.mealType === 1 ? maxMadpakkeDaysFromDate(adding.date) : 14
-
   return (
     <section className="plan-layout">
       <div className="timeline panel">
@@ -435,8 +457,6 @@ export function MealPlanPage() {
                   {MEAL_TYPES.map((mealType) => {
                     const blocked = mealType === 1 && !allowsMadpakkeDate(row.date)
                     const col = mealColumn(mealType)
-                    const isActive =
-                      !!adding && adding.date === row.date && adding.mealType === mealType
                     return blocked ? (
                       <div
                         key={`${row.date}-${mealType}`}
@@ -450,7 +470,7 @@ export function MealPlanPage() {
                       <button
                         key={`${row.date}-${mealType}`}
                         type="button"
-                        className={`timeline-slot${isActive ? ' is-active' : ''}`}
+                        className="timeline-slot"
                         style={{ gridColumn: col, gridRow: rowIndex + 1 }}
                         aria-label={`Tilføj ${MEAL_LABELS[mealType]} ${row.date}`}
                         onClick={() => openAdd(row.date, mealType)}
@@ -460,6 +480,44 @@ export function MealPlanPage() {
                 </Fragment>
               )
             })}
+
+            {draftEntry &&
+              draftSegments.map((seg) => (
+                <article
+                  key={`draft-${seg.row}`}
+                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.primary ? '' : ' is-continuation'}`}
+                  style={{
+                    gridColumn: mealColumn(draftEntry.mealType),
+                    gridRow: `${seg.row + 1} / span ${seg.span}`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <div className="timeline-bar-main">
+                    {draftEntry.recipeImageUrl ? (
+                      <img
+                        className="timeline-bar-thumb"
+                        src={draftEntry.recipeImageUrl}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : null}
+                    <div className="timeline-bar-body">
+                      <strong className="timeline-bar-title">{draftEntry.recipeTitle}</strong>
+                      {seg.primary ? (
+                        <>
+                          <span className="muted">{rangeLabel(draftEntry)}</span>
+                          <span className="macros">
+                            {draftEntry.servings} port.
+                            {draftDays > 1 ? ` · ${draftDays} dage` : ''}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="muted">fortsætter</span>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
 
             {allEntries.flatMap((entry) => {
               const segments = entrySegments(entry, rangeStart, rangeEnd, timelineRows)

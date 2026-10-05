@@ -507,6 +507,26 @@ p {
   box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.25);
 }
 
+.timeline-bar.is-draft {
+  z-index: 3;
+  pointer-events: none;
+  border-style: dashed;
+  border-width: 2px;
+  background: rgba(196, 92, 38, 0.1);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(196, 92, 38, 0.12);
+}
+
+.timeline-bar.is-draft.meal-1 {
+  background: rgba(45, 90, 78, 0.1);
+  border-color: rgba(45, 90, 78, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(45, 90, 78, 0.12);
+}
+
+.timeline-bar.is-draft .timeline-bar-title {
+  font-weight: 700;
+}
+
 .timeline-slot.is-blocked {
   cursor: default;
   background: repeating-linear-gradient(
