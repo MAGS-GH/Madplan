@@ -192,7 +192,7 @@ export function MealPlanPage() {
   const rowTemplate = useMemo(
     () =>
       timelineRows
-        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(4.6rem, auto)'))
+        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(5.4rem, auto)'))
         .join(' '),
     [timelineRows],
   )
