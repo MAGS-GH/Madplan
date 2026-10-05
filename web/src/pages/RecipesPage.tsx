@@ -14,8 +14,8 @@ export function RecipesPage() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Fejl'))
   }, [])
 
-  async function remove(id: string) {
-    if (!confirm('Slet denne ret?')) return
+  async function remove(id: string, title: string) {
+    if (!confirm(`Slet “${title}”?`)) return
     try {
       await api.deleteRecipe(id)
       setRecipes((prev) => prev.filter((r) => r.id !== id))
@@ -25,12 +25,12 @@ export function RecipesPage() {
   }
 
   return (
-    <section>
-      <div className="panel row" style={{ justifyContent: 'space-between' }}>
+    <section className="stack recipes-page">
+      <div className="panel row recipes-page-head" style={{ justifyContent: 'space-between' }}>
         <div>
           <h2>Retter</h2>
           <p className="muted" style={{ margin: 0 }}>
-            Gem mad I har lavet — med makroer pr. ret og pr. portion.
+            Jeres favoritter — med billeder, portioner og makroer.
           </p>
         </div>
         <Link className="btn accent" to="/retter/ny">
@@ -40,37 +40,76 @@ export function RecipesPage() {
 
       {error && <div className="error">{error}</div>}
 
-      <div className="panel">
-        {recipes.length === 0 ? (
-          <p>Ingen retter endnu. Opret den første!</p>
-        ) : (
-          <ul className="list">
-            {recipes.map((recipe) => (
-              <li key={recipe.id}>
-                <div className="row" style={{ alignItems: 'center', gap: '0.85rem', flex: 1 }}>
-                  {recipe.imageUrl ? (
-                    <img className="recipe-list-thumb" src={recipe.imageUrl} alt="" />
-                  ) : (
-                    <div className="recipe-list-thumb is-empty" />
-                  )}
-                  <div>
-                    <Link to={`/retter/${recipe.id}`}>
-                      <strong>{recipe.title}</strong>
-                    </Link>
-                    <div className="macros">{formatMacros(recipe.perServingMacros)} / portion</div>
-                    <div className="muted">
-                      {recipe.servings} portioner · {recipe.ingredients.length} ingredienser
-                    </div>
+      {recipes.length === 0 ? (
+        <div className="panel recipes-empty">
+          <p style={{ margin: 0 }}>Ingen retter endnu.</p>
+          <p className="muted" style={{ margin: 0 }}>
+            Opret den første — eller hent en opskrift fra URL.
+          </p>
+          <Link className="btn accent" to="/retter/ny">
+            Ny ret
+          </Link>
+        </div>
+      ) : (
+        <div className="recipe-gallery">
+          {recipes.map((recipe) => (
+            <article key={recipe.id} className="recipe-card">
+              <Link className="recipe-card-media" to={`/retter/${recipe.id}`}>
+                {recipe.imageUrl ? (
+                  <img src={recipe.imageUrl} alt="" loading="lazy" />
+                ) : (
+                  <div className="recipe-card-placeholder" aria-hidden="true">
+                    <span>{recipe.title.slice(0, 1).toUpperCase()}</span>
                   </div>
+                )}
+              </Link>
+              <div className="recipe-card-body">
+                <div className="recipe-card-top">
+                  <Link className="recipe-card-title" to={`/retter/${recipe.id}`}>
+                    {recipe.title}
+                  </Link>
+                  <button
+                    className="recipe-card-remove"
+                    type="button"
+                    title="Slet"
+                    aria-label={`Slet ${recipe.title}`}
+                    onClick={() => void remove(recipe.id, recipe.title)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </button>
                 </div>
-                <button className="btn ghost" type="button" onClick={() => void remove(recipe.id)}>
-                  Slet
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                <div className="recipe-card-meta">
+                  <span>{recipe.servings} portioner</span>
+                  <span>{recipe.ingredients.length} ingredienser</span>
+                </div>
+                <div className="recipe-card-macros">
+                  <span>{Math.round(recipe.perServingMacros.kcal)} kcal</span>
+                  <span>P {Math.round(recipe.perServingMacros.protein)} g</span>
+                  <span>K {Math.round(recipe.perServingMacros.carbs)} g</span>
+                  <span>F {Math.round(recipe.perServingMacros.fat)} g</span>
+                  <span className="muted">/ portion</span>
+                </div>
+                {recipe.ingredients.some((i) => i.imageUrl) && (
+                  <div className="recipe-card-ingredients" aria-hidden="true">
+                    {recipe.ingredients
+                      .filter((i) => i.imageUrl)
+                      .slice(0, 5)
+                      .map((ing) => (
+                        <img key={ing.id} src={ing.imageUrl!} alt="" loading="lazy" />
+                      ))}
+                  </div>
+                )}
+                <p className="recipe-card-macros-line muted">{formatMacros(recipe.perServingMacros)} / portion</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
