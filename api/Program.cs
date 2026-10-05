@@ -7,6 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.Configure<OpenAiOptions>(builder.Configuration.GetSection(OpenAiOptions.SectionName));
+builder.Services.Configure<S3Options>(builder.Configuration.GetSection(S3Options.SectionName));
+builder.Services.AddSingleton<ObjectStorageService>();
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Host=localhost;Port=5432;Database=madplan;Username=madplan;Password=madplan";
@@ -81,5 +83,6 @@ app.MapRecipeEndpoints();
 app.MapMealPlanEndpoints();
 app.MapShoppingEndpoints();
 app.MapProductEndpoints();
+app.MapUploadEndpoints();
 
 app.Run();

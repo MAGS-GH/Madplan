@@ -46,6 +46,7 @@ public class RecipeIngredient
     public string Name { get; set; } = string.Empty;
     public double Amount { get; set; }
     public string Unit { get; set; } = "g";
+    public string? ImageUrl { get; set; }
     /// <summary>Macros for the stated amount (not per 100g).</summary>
     public double Kcal { get; set; }
     public double Protein { get; set; }

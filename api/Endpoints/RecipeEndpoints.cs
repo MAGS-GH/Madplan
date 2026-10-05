@@ -105,6 +105,7 @@ public static class RecipeEndpoints
         Name = i.Name.Trim(),
         Amount = i.Amount,
         Unit = string.IsNullOrWhiteSpace(i.Unit) ? "g" : i.Unit.Trim(),
+        ImageUrl = string.IsNullOrWhiteSpace(i.ImageUrl) ? null : i.ImageUrl.Trim(),
         Kcal = i.Kcal,
         Protein = i.Protein,
         Carbs = i.Carbs,
@@ -126,7 +127,7 @@ public static class RecipeEndpoints
             recipe.CreatedAt,
             recipe.UpdatedAt,
             recipe.Ingredients.Select(i => new RecipeIngredientDto(
-                i.Id, i.ProductId, i.Name, i.Amount, i.Unit, i.Kcal, i.Protein, i.Carbs, i.Fat)).ToList(),
+                i.Id, i.ProductId, i.Name, i.Amount, i.Unit, i.Kcal, i.Protein, i.Carbs, i.Fat, i.ImageUrl)).ToList(),
             MacroCalculator.ToDto(total),
             MacroCalculator.ToDto(perServing));
     }

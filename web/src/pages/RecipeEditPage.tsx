@@ -16,6 +16,7 @@ function emptyIngredient(): DraftIngredient {
     carbs: 0,
     fat: 0,
     productId: null,
+    imageUrl: null,
   }
 }
 
@@ -35,6 +36,8 @@ export function RecipeEditPage() {
   const [importUrl, setImportUrl] = useState('')
   const [importing, setImporting] = useState(false)
   const [importInfo, setImportInfo] = useState<string | null>(null)
+  const [uploadingRecipeImage, setUploadingRecipeImage] = useState(false)
+  const [uploadingIngredientKey, setUploadingIngredientKey] = useState<string | null>(null)
 
   useEffect(() => {
     void api.listProducts().then(setProducts).catch(() => undefined)
@@ -57,6 +60,7 @@ export function RecipeEditPage() {
               protein: i.protein,
               carbs: i.carbs,
               fat: i.fat,
+              imageUrl: i.imageUrl ?? null,
             })),
           )
         })
@@ -142,6 +146,7 @@ export function RecipeEditPage() {
               protein: i.protein,
               carbs: i.carbs,
               fat: i.fat,
+              imageUrl: i.imageUrl ?? null,
             }))
           : [emptyIngredient()],
       )
@@ -150,6 +155,34 @@ export function RecipeEditPage() {
       setError(e instanceof Error ? e.message : 'Kunne ikke importere opskrift')
     } finally {
       setImporting(false)
+    }
+  }
+
+  async function uploadRecipeImage(file: File | null) {
+    if (!file) return
+    setUploadingRecipeImage(true)
+    setError(null)
+    try {
+      const uploaded = await api.uploadImage(file, 'recipes')
+      setImageUrl(uploaded.url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kunne ikke uploade billede')
+    } finally {
+      setUploadingRecipeImage(false)
+    }
+  }
+
+  async function uploadIngredientImage(key: string, file: File | null) {
+    if (!file) return
+    setUploadingIngredientKey(key)
+    setError(null)
+    try {
+      const uploaded = await api.uploadImage(file, 'ingredients')
+      updateIngredient(key, { imageUrl: uploaded.url })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kunne ikke uploade billede')
+    } finally {
+      setUploadingIngredientKey(null)
     }
   }
 
@@ -164,7 +197,7 @@ export function RecipeEditPage() {
         imageUrl: imageUrl?.trim() || null,
         ingredients: ingredients
           .filter((i) => i.name.trim())
-          .map(({ productId, name, amount, unit, kcal, protein, carbs, fat }) => ({
+          .map(({ productId, name, amount, unit, kcal, protein, carbs, fat, imageUrl: ingImage }) => ({
             productId,
             name,
             amount,
@@ -173,6 +206,7 @@ export function RecipeEditPage() {
             protein,
             carbs,
             fat,
+            imageUrl: ingImage?.trim() || null,
           })),
       }
       if (isNew) {
@@ -256,11 +290,39 @@ export function RecipeEditPage() {
             />
           </div>
         </div>
-        {imageUrl && (
+        {imageUrl ? (
           <div className="field">
             <label>Billede</label>
             <img className="preview-img" src={imageUrl} alt="" />
-            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value || null)} />
+            <div className="row" style={{ marginTop: '0.5rem' }}>
+              <label className="btn secondary" style={{ cursor: 'pointer' }}>
+                {uploadingRecipeImage ? 'Uploader…' : 'Skift billede'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  hidden
+                  disabled={uploadingRecipeImage}
+                  onChange={(e) => void uploadRecipeImage(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button className="btn ghost" type="button" onClick={() => setImageUrl(null)}>
+                Fjern
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="field">
+            <label>Billede</label>
+            <label className="btn secondary" style={{ cursor: 'pointer', width: 'fit-content' }}>
+              {uploadingRecipeImage ? 'Uploader…' : 'Upload billede'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                hidden
+                disabled={uploadingRecipeImage}
+                onChange={(e) => void uploadRecipeImage(e.target.files?.[0] ?? null)}
+              />
+            </label>
           </div>
         )}
         <div className="field">
@@ -279,86 +341,117 @@ export function RecipeEditPage() {
 
         {ingredients.map((ing) => (
           <div key={ing.key} className="stack" style={{ borderTop: '1px solid var(--line)', paddingTop: '0.75rem' }}>
-            <div className="row">
-              <div className="field">
-                <label>Fra produkt (valgfrit)</label>
-                <select
-                  value={ing.productId ?? ''}
-                  onChange={(e) => {
-                    if (e.target.value) applyProduct(ing.key, e.target.value)
-                    else updateIngredient(ing.key, { productId: null })
-                  }}
-                >
-                  <option value="">Manuel</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                      {p.brand ? ` · ${p.brand}` : ''}
-                    </option>
-                  ))}
-                </select>
+            <div className="row" style={{ alignItems: 'flex-start' }}>
+              <div className="ingredient-thumb-wrap">
+                {ing.imageUrl ? (
+                  <img className="ingredient-thumb" src={ing.imageUrl} alt="" />
+                ) : (
+                  <div className="ingredient-thumb is-empty">Foto</div>
+                )}
+                <label className="btn ghost" style={{ cursor: 'pointer', padding: '0.15rem 0' }}>
+                  {uploadingIngredientKey === ing.key ? '…' : ing.imageUrl ? 'Skift' : 'Upload'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    hidden
+                    disabled={uploadingIngredientKey === ing.key}
+                    onChange={(e) => void uploadIngredientImage(ing.key, e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {ing.imageUrl && (
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    style={{ padding: '0.15rem 0' }}
+                    onClick={() => updateIngredient(ing.key, { imageUrl: null })}
+                  >
+                    Fjern
+                  </button>
+                )}
               </div>
-              <div className="field">
-                <label>Navn</label>
-                <input
-                  value={ing.name}
-                  onChange={(e) => updateIngredient(ing.key, { name: e.target.value })}
-                  placeholder="Hakket oksekød"
-                />
+              <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+                <div className="row">
+                  <div className="field">
+                    <label>Fra produkt (valgfrit)</label>
+                    <select
+                      value={ing.productId ?? ''}
+                      onChange={(e) => {
+                        if (e.target.value) applyProduct(ing.key, e.target.value)
+                        else updateIngredient(ing.key, { productId: null })
+                      }}
+                    >
+                      <option value="">Manuel</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                          {p.brand ? ` · ${p.brand}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Navn</label>
+                    <input
+                      value={ing.name}
+                      onChange={(e) => updateIngredient(ing.key, { name: e.target.value })}
+                      placeholder="Hakket oksekød"
+                    />
+                  </div>
+                </div>
+                <div className="row">
+                  <div className="field" style={{ maxWidth: 110 }}>
+                    <label>Mængde</label>
+                    <input
+                      type="number"
+                      value={ing.amount}
+                      onChange={(e) => recalcFromAmount(ing.key, Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="field" style={{ maxWidth: 90 }}>
+                    <label>Enhed</label>
+                    <input value={ing.unit} onChange={(e) => updateIngredient(ing.key, { unit: e.target.value })} />
+                  </div>
+                  <div className="field" style={{ maxWidth: 90 }}>
+                    <label>Kcal</label>
+                    <input
+                      type="number"
+                      value={ing.kcal}
+                      onChange={(e) => updateIngredient(ing.key, { kcal: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="field" style={{ maxWidth: 80 }}>
+                    <label>P</label>
+                    <input
+                      type="number"
+                      value={ing.protein}
+                      onChange={(e) => updateIngredient(ing.key, { protein: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="field" style={{ maxWidth: 80 }}>
+                    <label>K</label>
+                    <input
+                      type="number"
+                      value={ing.carbs}
+                      onChange={(e) => updateIngredient(ing.key, { carbs: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="field" style={{ maxWidth: 80 }}>
+                    <label>F</label>
+                    <input
+                      type="number"
+                      value={ing.fat}
+                      onChange={(e) => updateIngredient(ing.key, { fat: Number(e.target.value) })}
+                    />
+                  </div>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setIngredients((prev) => prev.filter((i) => i.key !== ing.key))}
+                  >
+                    Fjern
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="row">
-              <div className="field" style={{ maxWidth: 110 }}>
-                <label>Mængde</label>
-                <input
-                  type="number"
-                  value={ing.amount}
-                  onChange={(e) => recalcFromAmount(ing.key, Number(e.target.value))}
-                />
-              </div>
-              <div className="field" style={{ maxWidth: 90 }}>
-                <label>Enhed</label>
-                <input value={ing.unit} onChange={(e) => updateIngredient(ing.key, { unit: e.target.value })} />
-              </div>
-              <div className="field" style={{ maxWidth: 90 }}>
-                <label>Kcal</label>
-                <input
-                  type="number"
-                  value={ing.kcal}
-                  onChange={(e) => updateIngredient(ing.key, { kcal: Number(e.target.value) })}
-                />
-              </div>
-              <div className="field" style={{ maxWidth: 80 }}>
-                <label>P</label>
-                <input
-                  type="number"
-                  value={ing.protein}
-                  onChange={(e) => updateIngredient(ing.key, { protein: Number(e.target.value) })}
-                />
-              </div>
-              <div className="field" style={{ maxWidth: 80 }}>
-                <label>K</label>
-                <input
-                  type="number"
-                  value={ing.carbs}
-                  onChange={(e) => updateIngredient(ing.key, { carbs: Number(e.target.value) })}
-                />
-              </div>
-              <div className="field" style={{ maxWidth: 80 }}>
-                <label>F</label>
-                <input
-                  type="number"
-                  value={ing.fat}
-                  onChange={(e) => updateIngredient(ing.key, { fat: Number(e.target.value) })}
-                />
-              </div>
-              <button
-                className="btn ghost"
-                type="button"
-                onClick={() => setIngredients((prev) => prev.filter((i) => i.key !== ing.key))}
-              >
-                Fjern
-              </button>
             </div>
           </div>
         ))}

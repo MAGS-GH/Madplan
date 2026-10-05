@@ -47,12 +47,21 @@ export function RecipesPage() {
           <ul className="list">
             {recipes.map((recipe) => (
               <li key={recipe.id}>
-                <div>
-                  <Link to={`/retter/${recipe.id}`}>
-                    <strong>{recipe.title}</strong>
-                  </Link>
-                  <div className="macros">{formatMacros(recipe.perServingMacros)} / portion</div>
-                  <div className="muted">{recipe.servings} portioner · {recipe.ingredients.length} ingredienser</div>
+                <div className="row" style={{ alignItems: 'center', gap: '0.85rem', flex: 1 }}>
+                  {recipe.imageUrl ? (
+                    <img className="recipe-list-thumb" src={recipe.imageUrl} alt="" />
+                  ) : (
+                    <div className="recipe-list-thumb is-empty" />
+                  )}
+                  <div>
+                    <Link to={`/retter/${recipe.id}`}>
+                      <strong>{recipe.title}</strong>
+                    </Link>
+                    <div className="macros">{formatMacros(recipe.perServingMacros)} / portion</div>
+                    <div className="muted">
+                      {recipe.servings} portioner · {recipe.ingredients.length} ingredienser
+                    </div>
+                  </div>
                 </div>
                 <button className="btn ghost" type="button" onClick={() => void remove(recipe.id)}>
                   Slet

@@ -94,6 +94,12 @@ export const api = {
     return request<Product>('/products/label-scan', { method: 'POST', body: form })
   },
   listProducts: () => request<Product[]>('/products'),
+  uploadImage: async (file: File, folder = 'uploads') => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('folder', folder)
+    return request<{ url: string; key: string }>('/uploads', { method: 'POST', body: form })
+  },
 }
 
 export function macrosFromPer100g(

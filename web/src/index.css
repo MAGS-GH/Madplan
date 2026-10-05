@@ -682,6 +682,42 @@ p {
   border: 1px solid var(--line);
 }
 
+.recipe-list-thumb,
+.ingredient-thumb {
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: rgba(26, 60, 52, 0.05);
+  flex-shrink: 0;
+}
+
+.recipe-list-thumb.is-empty,
+.ingredient-thumb.is-empty {
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.ingredient-thumb-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 3.6rem;
+  flex-shrink: 0;
+}
+
+.ingredient-thumb {
+  width: 3.6rem;
+  height: 3.6rem;
+}
+
 @media (min-width: 800px) {
   .app-shell {
     padding-bottom: 2rem;

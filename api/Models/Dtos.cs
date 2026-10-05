@@ -11,7 +11,8 @@ public record RecipeIngredientDto(
     double Kcal,
     double Protein,
     double Carbs,
-    double Fat);
+    double Fat,
+    string? ImageUrl);
 
 public record RecipeDto(
     Guid Id,
@@ -33,7 +34,8 @@ public record RecipeIngredientInput(
     double Kcal,
     double Protein,
     double Carbs,
-    double Fat);
+    double Fat,
+    string? ImageUrl = null);
 
 public record UpsertRecipeRequest(
     string Title,

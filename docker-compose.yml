@@ -16,6 +16,38 @@ services:
     networks:
       - internal
 
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-madplan}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-madplanmadplan}
+    volumes:
+      - minio_data:/data
+    networks:
+      - internal
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 1; done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set download "local/$$S3_BUCKET"
+        exit 0
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-madplan}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-madplanmadplan}
+      S3_BUCKET: ${S3_BUCKET:-madplan}
+    networks:
+      - internal
+    restart: "no"
+
   api:
     build: ./api
     restart: unless-stopped
@@ -25,9 +57,17 @@ services:
       OpenAI__ApiKey: ${OpenAI__ApiKey:-}
       OpenAI__Model: ${OpenAI__Model:-gpt-4o-mini}
       Cors__Origins: ${Cors__Origins:-https://mad.mercantec.tech}
+      S3__Endpoint: ${S3__Endpoint:-http://minio:9000}
+      S3__AccessKey: ${S3_ACCESS_KEY:-madplan}
+      S3__SecretKey: ${S3_SECRET_KEY:-madplanmadplan}
+      S3__Bucket: ${S3_BUCKET:-madplan}
+      S3__PublicBasePath: ${S3__PublicBasePath:-/media}
+      S3__ForcePathStyle: ${S3__ForcePathStyle:-true}
     depends_on:
       db:
         condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - internal
 
@@ -39,6 +79,7 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+      - minio
     networks:
       - internal
       - dokploy-network
@@ -52,6 +93,7 @@ services:
 
 volumes:
   db_data:
+  minio_data:
 
 networks:
   internal:

@@ -15,6 +15,7 @@ export type RecipeIngredient = {
   protein: number
   carbs: number
   fat: number
+  imageUrl?: string | null
 }
 
 export type Recipe = {
@@ -39,6 +40,7 @@ export type RecipeIngredientInput = {
   protein: number
   carbs: number
   fat: number
+  imageUrl?: string | null
 }
 
 export type UpsertRecipeRequest = {
