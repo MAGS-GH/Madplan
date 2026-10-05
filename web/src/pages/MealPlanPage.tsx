@@ -513,7 +513,7 @@ export function MealPlanPage() {
               draftSegments.map((seg) => (
                 <article
                   key={`draft-${seg.row}`}
-                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.span > 1 ? ' is-tall' : ''}${seg.span >= 3 ? ' is-detailed' : ''}${seg.primary ? '' : ' is-continuation'}`}
+                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.span > 1 ? ' is-tall is-detailed' : ''}${seg.primary ? '' : ' is-continuation'}`}
                   style={{
                     gridColumn: mealColumn(draftEntry.mealType),
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
@@ -538,7 +538,7 @@ export function MealPlanPage() {
                             {draftEntry.servings} port.
                             {draftDays > 1 ? ` · ${draftDays} dage` : ''}
                           </span>
-                          {seg.span >= 3 && selectedRecipe?.perServingMacros ? (
+                          {seg.span > 1 && selectedRecipe?.perServingMacros ? (
                             <MacroDetails
                               macros={{
                                 kcal: selectedRecipe.perServingMacros.kcal * draftEntry.servings,
@@ -564,7 +564,7 @@ export function MealPlanPage() {
               return segments.map((seg) => (
                 <article
                   key={`${entry.id}-${seg.row}`}
-                  className={`timeline-bar meal-${entry.mealType}${seg.span > 1 ? ' is-tall' : ''}${seg.span >= 3 ? ' is-detailed' : ''}${seg.primary ? '' : ' is-continuation'}`}
+                  className={`timeline-bar meal-${entry.mealType}${seg.span > 1 ? ' is-tall is-detailed' : ''}${seg.primary ? '' : ' is-continuation'}`}
                   style={{
                     gridColumn: mealColumn(entry.mealType),
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
@@ -612,9 +612,9 @@ export function MealPlanPage() {
                           <span className="macros">
                             {entry.servings} port.
                             {totalDays > 1 ? ` · ${totalDays} dage` : ''}
-                            {seg.span < 3 && entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
+                            {seg.span === 1 && entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
                           </span>
-                          {seg.span >= 3 && entry.macros ? <MacroDetails macros={entry.macros} /> : null}
+                          {seg.span > 1 && entry.macros ? <MacroDetails macros={entry.macros} /> : null}
                         </>
                       ) : (
                         <span className="muted">fortsætter</span>
