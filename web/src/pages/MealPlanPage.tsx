@@ -142,6 +142,16 @@ function rangeLabel(entry: MealPlanEntry) {
   return `${formatShort(entry.date)} → ${formatShort(entryEnd(entry))}`
 }
 
+function entryMetaLine(entry: MealPlanEntry, totalDays: number) {
+  const parts = [
+    formatShort(entry.date),
+    `${entry.servings} port.`,
+    entry.macros ? formatMacros(entry.macros) : null,
+    totalDays > 1 ? `${totalDays} dage` : null,
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
+
 function formatShort(iso: string) {
   return new Date(iso + 'T12:00:00').toLocaleDateString('da-DK', {
     weekday: 'short',
@@ -192,7 +202,7 @@ export function MealPlanPage() {
   const rowTemplate = useMemo(
     () =>
       timelineRows
-        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(6.2rem, auto)'))
+        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(4.25rem, auto)'))
         .join(' '),
     [timelineRows],
   )
@@ -485,7 +495,7 @@ export function MealPlanPage() {
               draftSegments.map((seg) => (
                 <article
                   key={`draft-${seg.row}`}
-                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.primary ? '' : ' is-continuation'}`}
+                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.span === 1 ? ' is-compact' : ''}${seg.primary ? '' : ' is-continuation'}`}
                   style={{
                     gridColumn: mealColumn(draftEntry.mealType),
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
@@ -504,13 +514,19 @@ export function MealPlanPage() {
                     <div className="timeline-bar-body">
                       <strong className="timeline-bar-title">{draftEntry.recipeTitle}</strong>
                       {seg.primary ? (
-                        <>
-                          <span className="muted">{rangeLabel(draftEntry)}</span>
-                          <span className="macros">
-                            {draftEntry.servings} port.
-                            {draftDays > 1 ? ` · ${draftDays} dage` : ''}
+                        seg.span === 1 ? (
+                          <span className="macros timeline-bar-meta">
+                            {entryMetaLine(draftEntry, draftDays)}
                           </span>
-                        </>
+                        ) : (
+                          <>
+                            <span className="muted">{rangeLabel(draftEntry)}</span>
+                            <span className="macros">
+                              {draftEntry.servings} port.
+                              {draftDays > 1 ? ` · ${draftDays} dage` : ''}
+                            </span>
+                          </>
+                        )
                       ) : (
                         <span className="muted">fortsætter</span>
                       )}
@@ -526,7 +542,7 @@ export function MealPlanPage() {
               return segments.map((seg) => (
                 <article
                   key={`${entry.id}-${seg.row}`}
-                  className={`timeline-bar meal-${entry.mealType}${seg.primary ? '' : ' is-continuation'}`}
+                  className={`timeline-bar meal-${entry.mealType}${seg.span === 1 ? ' is-compact' : ''}${seg.primary ? '' : ' is-continuation'}`}
                   style={{
                     gridColumn: mealColumn(entry.mealType),
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
@@ -569,14 +585,20 @@ export function MealPlanPage() {
                         {entry.recipeTitle}
                       </Link>
                       {seg.primary ? (
-                        <>
-                          <span className="muted">{rangeLabel(entry)}</span>
-                          <span className="macros">
-                            {entry.servings} port.
-                            {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
-                            {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                        seg.span === 1 ? (
+                          <span className="macros timeline-bar-meta">
+                            {entryMetaLine(entry, totalDays)}
                           </span>
-                        </>
+                        ) : (
+                          <>
+                            <span className="muted">{rangeLabel(entry)}</span>
+                            <span className="macros">
+                              {entry.servings} port.
+                              {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
+                              {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                            </span>
+                          </>
+                        )
                       ) : (
                         <span className="muted">fortsætter</span>
                       )}
