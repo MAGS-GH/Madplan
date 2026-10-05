@@ -192,7 +192,7 @@ export function MealPlanPage() {
   const rowTemplate = useMemo(
     () =>
       timelineRows
-        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(5.4rem, auto)'))
+        .map((r) => (r.kind === 'divider' ? '2rem' : 'minmax(6.2rem, auto)'))
         .join(' '),
     [timelineRows],
   )
@@ -474,56 +474,56 @@ export function MealPlanPage() {
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
                   }}
                 >
-                  {seg.primary ? (
-                    <>
-                      <div className="timeline-bar-main">
-                        {entry.recipeImageUrl ? (
-                          <img
-                            className="timeline-bar-thumb"
-                            src={entry.recipeImageUrl}
-                            alt=""
-                            loading="lazy"
-                          />
-                        ) : null}
-                        <div className="timeline-bar-body">
-                          <strong>{entry.recipeTitle}</strong>
+                  {owned && seg.primary && (
+                    <button
+                      className="timeline-bar-remove"
+                      type="button"
+                      title="Fjern"
+                      aria-label={`Fjern ${entry.recipeTitle}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void removeEntry(entry.id)
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                      </svg>
+                    </button>
+                  )}
+                  <div className="timeline-bar-main">
+                    {entry.recipeImageUrl ? (
+                      <img
+                        className="timeline-bar-thumb"
+                        src={entry.recipeImageUrl}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : null}
+                    <div className="timeline-bar-body">
+                      <Link
+                        className="timeline-bar-title"
+                        to={`/retter/${entry.recipeId}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {entry.recipeTitle}
+                      </Link>
+                      {seg.primary ? (
+                        <>
                           <span className="muted">{rangeLabel(entry)}</span>
                           <span className="macros">
                             {entry.servings} port.
                             {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
                             {totalDays > 1 ? ` · ${totalDays} dage` : ''}
                           </span>
-                        </div>
-                      </div>
-                      {owned && (
-                        <button
-                          className="btn ghost timeline-bar-remove"
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void removeEntry(entry.id)
-                          }}
-                        >
-                          Fjern
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <div className="timeline-bar-main">
-                      {entry.recipeImageUrl ? (
-                        <img
-                          className="timeline-bar-thumb"
-                          src={entry.recipeImageUrl}
-                          alt=""
-                          loading="lazy"
-                        />
-                      ) : null}
-                      <div className="timeline-bar-body">
-                        <strong>{entry.recipeTitle}</strong>
+                        </>
+                      ) : (
                         <span className="muted">fortsætter</span>
-                      </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </article>
               ))
             })}
