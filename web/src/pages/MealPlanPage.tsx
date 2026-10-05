@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addDays, api, formatMacros, toMonday } from '../api'
-import type { MealPlan, MealPlanEntry, MealType, Recipe } from '../types'
+import type { Macros, MealPlan, MealPlanEntry, MealType, Recipe } from '../types'
 import { MEAL_LABELS, MEAL_TYPES } from '../types'
 
 const DAY_NAMES = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
@@ -140,6 +140,34 @@ function rangeLabel(entry: MealPlanEntry) {
   const days = Math.max(1, entry.days ?? 1)
   if (days === 1) return formatShort(entry.date)
   return `${formatShort(entry.date)} → ${formatShort(entryEnd(entry))}`
+}
+
+function formatMacroValue(value: number) {
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+function MacroDetails({ macros }: { macros: Macros }) {
+  return (
+    <dl className="timeline-macro-details">
+      <div>
+        <dt>Kalorier</dt>
+        <dd>{Math.round(macros.kcal)} kcal</dd>
+      </div>
+      <div>
+        <dt>Protein</dt>
+        <dd>{formatMacroValue(macros.protein)} g</dd>
+      </div>
+      <div>
+        <dt>Kulhydrat</dt>
+        <dd>{formatMacroValue(macros.carbs)} g</dd>
+      </div>
+      <div>
+        <dt>Fedt</dt>
+        <dd>{formatMacroValue(macros.fat)} g</dd>
+      </div>
+    </dl>
+  )
 }
 
 function formatShort(iso: string) {
@@ -485,7 +513,7 @@ export function MealPlanPage() {
               draftSegments.map((seg) => (
                 <article
                   key={`draft-${seg.row}`}
-                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.span > 1 ? ' is-tall' : ''}${seg.primary ? '' : ' is-continuation'}`}
+                  className={`timeline-bar is-draft meal-${draftEntry.mealType}${seg.span > 1 ? ' is-tall' : ''}${seg.span >= 3 ? ' is-detailed' : ''}${seg.primary ? '' : ' is-continuation'}`}
                   style={{
                     gridColumn: mealColumn(draftEntry.mealType),
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
@@ -510,6 +538,16 @@ export function MealPlanPage() {
                             {draftEntry.servings} port.
                             {draftDays > 1 ? ` · ${draftDays} dage` : ''}
                           </span>
+                          {seg.span >= 3 && selectedRecipe?.perServingMacros ? (
+                            <MacroDetails
+                              macros={{
+                                kcal: selectedRecipe.perServingMacros.kcal * draftEntry.servings,
+                                protein: selectedRecipe.perServingMacros.protein * draftEntry.servings,
+                                carbs: selectedRecipe.perServingMacros.carbs * draftEntry.servings,
+                                fat: selectedRecipe.perServingMacros.fat * draftEntry.servings,
+                              }}
+                            />
+                          ) : null}
                         </>
                       ) : (
                         <span className="muted">fortsætter</span>
@@ -526,7 +564,7 @@ export function MealPlanPage() {
               return segments.map((seg) => (
                 <article
                   key={`${entry.id}-${seg.row}`}
-                  className={`timeline-bar meal-${entry.mealType}${seg.span > 1 ? ' is-tall' : ''}${seg.primary ? '' : ' is-continuation'}`}
+                  className={`timeline-bar meal-${entry.mealType}${seg.span > 1 ? ' is-tall' : ''}${seg.span >= 3 ? ' is-detailed' : ''}${seg.primary ? '' : ' is-continuation'}`}
                   style={{
                     gridColumn: mealColumn(entry.mealType),
                     gridRow: `${seg.row + 1} / span ${seg.span}`,
@@ -573,9 +611,10 @@ export function MealPlanPage() {
                           <span className="muted">{rangeLabel(entry)}</span>
                           <span className="macros">
                             {entry.servings} port.
-                            {entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
                             {totalDays > 1 ? ` · ${totalDays} dage` : ''}
+                            {seg.span < 3 && entry.macros ? ` · ${formatMacros(entry.macros)}` : ''}
                           </span>
+                          {seg.span >= 3 && entry.macros ? <MacroDetails macros={entry.macros} /> : null}
                         </>
                       ) : (
                         <span className="muted">fortsætter</span>
