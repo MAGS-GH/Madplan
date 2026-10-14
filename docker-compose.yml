@@ -26,7 +26,9 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - internal
+      internal:
+        aliases:
+          - madplan-minio
 
   api:
     build: ./api
@@ -37,7 +39,7 @@ services:
       OpenAI__ApiKey: ${OpenAI__ApiKey:-}
       OpenAI__Model: ${OpenAI__Model:-gpt-4o-mini}
       Cors__Origins: ${Cors__Origins:-https://mad.mags.dk}
-      S3__Endpoint: ${S3__Endpoint:-http://minio:9000}
+      S3__Endpoint: ${S3__Endpoint:-http://madplan-minio:9000}
       S3__AccessKey: ${S3_ACCESS_KEY:-madplan}
       S3__SecretKey: ${S3_SECRET_KEY:-madplanmadplan}
       S3__Bucket: ${S3_BUCKET:-madplan}
@@ -49,7 +51,9 @@ services:
       minio:
         condition: service_started
     networks:
-      - internal
+      internal:
+        aliases:
+          - madplan-api
 
   web:
     build:
