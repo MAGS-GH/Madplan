@@ -76,6 +76,12 @@ volumes:
   minio_data:
 
 networks:
+  # Genbrug eksisterende net — hosten har opbrugte Docker address pools.
   internal:
+    name: madplan-dev-gj8k5k_internal
+    external: true
   dokploy-network:
+    external: true
+  default:
+    name: dokploy-network
     external: true
