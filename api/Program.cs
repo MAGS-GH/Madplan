@@ -35,7 +35,7 @@ builder.Services.AddHttpClient<OpenAiLabelService>((sp, client) =>
 builder.Services.AddHttpClient<RecipeImportService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(90);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("Madplan/1.0 (+https://mad.mercantec.tech)");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Madplan/1.0 (+https://mad.mags.dk)");
 });
 
 var corsOrigins = builder.Configuration["Cors:Origins"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
